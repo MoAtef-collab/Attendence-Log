@@ -6,6 +6,31 @@
 <title>حضور Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script type="module">
+// ========== FIREBASE INIT ==========
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCbMJjXDVcvWNdymsu5_CuMwzS2SPINcTc",
+  authDomain: "attendance-system-7aefe.firebaseapp.com",
+  projectId: "attendance-system-7aefe",
+  storageBucket: "attendance-system-7aefe.firebasestorage.app",
+  messagingSenderId: "253610287352",
+  appId: "1:253610287352:web:090bffcc9d33d444ffdb0d"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// Expose to global scope so non-module functions can use
+window.FS = {
+  db, collection, addDoc, getDocs, deleteDoc, doc,
+  query, where, onSnapshot, setDoc, getDoc
+};
+window.fbReady = true;
+window.dispatchEvent(new Event('fbReady'));
+</script>
 <style>
 :root{--bg:#080c18;--s1:#0d1526;--s2:#111e35;--a1:#3ecfb2;--a2:#f97316;--a3:#6366f1;--red:#ef4444;--yellow:#eab308;--purple:#a855f7;--text:#e2e8f5;--muted:#4a5a72;--border:rgba(62,207,178,0.12);--r:12px}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -556,7 +581,10 @@ function getIni(name){
 
 let EMPS = initEmps();
 
-function saveEmps(){ localStorage.setItem('emps_v4', JSON.stringify(EMPS)); }
+function saveEmps(){
+  localStorage.setItem('emps_v4', JSON.stringify(EMPS));
+  DB.saveEmpsToFirebase(EMPS);
+}
 
 // ========== DB ==========
 function genDemo(){
@@ -583,10 +611,53 @@ function genDemo(){
   return r;
 }
 
+// ========== HYBRID DB (localStorage + Firebase) ==========
 const DB={
   rec:(()=>{try{const s=localStorage.getItem('hd4');return s?JSON.parse(s):genDemo();}catch(e){return genDemo();}})(),
   pend:(()=>{try{return JSON.parse(localStorage.getItem('hp4')||'[]');}catch(e){return [];}})(),
-  save(){try{localStorage.setItem('hd4',JSON.stringify(this.rec));localStorage.setItem('hp4',JSON.stringify(this.pend));}catch(e){}}
+  save(){
+    try{
+      localStorage.setItem('hd4',JSON.stringify(this.rec));
+      localStorage.setItem('hp4',JSON.stringify(this.pend));
+    }catch(e){}
+  },
+  async pushToFirebase(record){
+    try{
+      if(!window.fbReady)return;
+      const{db,collection,addDoc}=window.FS;
+      await addDoc(collection(db,'attendance'),record);
+    }catch(e){console.warn('Firebase push failed:',e);}
+  },
+  async pullFromFirebase(){
+    try{
+      if(!window.fbReady)return;
+      const{db,collection,getDocs}=window.FS;
+      const snap=await getDocs(collection(db,'attendance'));
+      const fbRecs=snap.docs.map(d=>({...d.data(),fbId:d.id}));
+      // Merge with local — avoid duplicates by time+name
+      fbRecs.forEach(fr=>{
+        const exists=this.rec.some(r=>r.name===fr.name&&r.time===fr.time&&r.kind===fr.kind);
+        if(!exists)this.rec.push(fr);
+      });
+      this.save();
+    }catch(e){console.warn('Firebase pull failed:',e);}
+  },
+  async saveEmpsToFirebase(emps){
+    try{
+      if(!window.fbReady)return;
+      const{db,doc,setDoc}=window.FS;
+      await setDoc(doc(db,'config','employees'),{list:emps});
+    }catch(e){console.warn('Firebase emps save failed:',e);}
+  },
+  async loadEmpsFromFirebase(){
+    try{
+      if(!window.fbReady)return null;
+      const{db,doc,getDoc}=window.FS;
+      const snap=await getDoc(doc(db,'config','employees'));
+      if(snap.exists())return snap.data().list;
+      return null;
+    }catch(e){console.warn('Firebase emps load failed:',e);return null;}
+  }
 };
 
 // ========== STATE ==========
@@ -602,6 +673,23 @@ window.addEventListener('offline',()=>{online=false;updNet();});
 // Block browser back button
 history.pushState(null,'',location.href);
 window.addEventListener('popstate',()=>{ history.pushState(null,'',location.href); });
+
+// Pull data from Firebase when ready
+window.addEventListener('fbReady', async ()=>{
+  // Try load employees from Firebase first
+  const fbEmps = await DB.loadEmpsFromFirebase();
+  if(fbEmps && fbEmps.length){
+    EMPS = fbEmps;
+    localStorage.setItem('emps_v4', JSON.stringify(EMPS));
+  }
+  // Pull attendance records
+  await DB.pullFromFirebase();
+  // If manager is already logged in, refresh board
+  if(me?.role==='mgr') renderBoard();
+  // Auto sync any pending records
+  autoSync();
+  console.log('✓ Firebase connected');
+});
 
 // ========== PAGES ==========
 function go(id){
@@ -897,8 +985,14 @@ function confirmRecord(){
   const today=new Date().toDateString();
   const rec={name:me.name,kind,sub,time:Date.now(),lat:gps?gps.lat:0,lng:gps?gps.lng:0,offline:!online,date:today};
   DB.rec.push(rec);
-  if(!online){DB.pend.push(rec);toast('✓ مسجل — سيُرفع عند الاتصال','w');}
-  else{const m={in:'✓ تم تسجيل الحضور',out:'✓ تم تسجيل الانصراف',leave:'✓ تم تسجيل الإجازة'};toast(m[kind],'s');}
+  if(!online){
+    DB.pend.push(rec);
+    toast('✓ مسجل محلياً — سيُرفع عند الاتصال','w');
+  } else {
+    DB.pushToFirebase(rec);
+    const m={in:'✓ تم تسجيل الحضور',out:'✓ تم تسجيل الانصراف',leave:'✓ تم تسجيل الإجازة'};
+    toast(m[kind],'s');
+  }
   DB.save();renderLog();checkDayDone();
 }
 
@@ -1129,7 +1223,18 @@ function delRec(name,idx){
 }
 
 // ========== SYNC/EXPORT ==========
-function autoSync(){if(!DB.pend.length)return;setTimeout(()=>{DB.pend=[];DB.save();if(me?.role==='mgr')renderBoard();},1000);}
+function autoSync(){
+  if(!DB.pend.length)return;
+  toast('↻ جاري المزامنة...','w');
+  const pending=[...DB.pend];
+  Promise.all(pending.map(r=>DB.pushToFirebase(r))).then(()=>{
+    DB.pend=[];DB.save();
+    toast('✓ تمت المزامنة مع Firebase','s');
+    if(me?.role==='mgr')renderBoard();
+  }).catch(()=>{
+    toast('تعذرت المزامنة — سيُعاد المحاولة','w');
+  });
+}
 function syncAll(){const b=document.getElementById('syncBtn');b.innerHTML='<span class="syncing">↻</span>';setTimeout(()=>{b.innerHTML='↻';DB.pend=[];DB.save();renderBoard();toast('✓ تمت المزامنة','s');},1200);}
 
 function exportCSV(){
