@@ -45,7 +45,7 @@ body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);min-h
 #pgLogin{align-items:center;justify-content:center;padding:1.5rem;background:var(--bg)}
 .lwrap{width:100%;max-width:400px}
 .brand{text-align:center;margin-bottom:2rem}
-.bico{width:150px;height:150px;background:linear-gradient(135deg,var(--a1),#00a882);border-radius:20px;display:inline-flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:.8rem;box-shadow:0 8px 32px rgba(62,207,178,.3)}
+.bico{width:170px;height:170px;background:transparent;border-radius:20px;display:inline-flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:.8rem;box-shadow:0 8px 32px rgba(62,207,178,.3)}
 .brand h1{font-size:2rem;font-weight:900;color:var(--a1)}.brand p{font-size:.75rem;color:var(--muted)}
 .card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:1.8rem;box-shadow:0 0 40px rgba(62,207,178,.1)}
 .rtabs{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1.4rem}
@@ -485,21 +485,21 @@ canvas{max-height:160px}
 <div class="sheet" id="shLeave">
   <div class="shandle"></div><h3>🌴 اختر نوع الإجازة</h3>
   <div class="sgrid">
-    <div class="sopt" onclick="pickType('leave','أوف')">😴 أوف</div>
-    <div class="sopt" onclick="pickType('leave','اعتيادية')">🏖️ اعتيادية</div>
-    <div class="sopt" onclick="pickType('leave','عارضة')">⚡ عارضة</div>
-    <div class="sopt" onclick="pickType('leave','مرضية')">🏥 مرضية</div>
-    <div class="sopt" onclick="pickType('leave','بدل نبطشية')">🌙 بدل نبطشية</div>
-    <div class="sopt" onclick="pickType('leave','إجازة وضع')">👶 إجازة وضع</div>
-    <div class="sopt" onclick="pickType('leave','بدل صباحي')">🌅 بدل صباحي</div>
-    <div class="sopt" onclick="pickType('leave','بدل مأمورية')">📋 بدل مأمورية</div>
-    <div class="sopt" style="grid-column:1/-1;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.08);color:var(--a3)" onclick="openOfficialLeave()">🏛️ إجازة رسمية (بتاريخ)</div>
+    <div class="sopt" onclick="openLeaveDate('أوف')">😴 أوف</div>
+    <div class="sopt" onclick="openLeaveDate('اعتيادية')">🏖️ اعتيادية</div>
+    <div class="sopt" onclick="openLeaveDate('عارضة')">⚡ عارضة</div>
+    <div class="sopt" onclick="openLeaveDate('مرضية')">🏥 مرضية</div>
+    <div class="sopt" onclick="openLeaveDate('بدل نبطشية')">🌙 بدل نبطشية</div>
+    <div class="sopt" onclick="openLeaveDate('إجازة وضع')">👶 إجازة وضع</div>
+    <div class="sopt" onclick="openLeaveDate('بدل صباحي')">🌅 بدل صباحي</div>
+    <div class="sopt" onclick="openLeaveDate('بدل مأمورية')">📋 بدل مأمورية</div>
+    <div class="sopt" style="grid-column:1/-1;border-color:rgba(99,102,241,.3);background:rgba(99,102,241,.08);color:var(--a3)" onclick="openLeaveDate('رسمية')">🏛️ إجازة رسمية</div>
   </div>
 </div>
 
 <!-- OFFICIAL LEAVE SHEET -->
 <div class="sheet" id="shOfficialLeave">
-  <div class="shandle"></div><h3>🏛️ إجازة رسمية</h3>
+  <div class="shandle"></div><h3 id="leaveDateTitle">🌴 تحديد فترة الإجازة</h3>
   <div class="fg"><label>من تاريخ</label><input type="date" id="olFrom"/></div>
   <div class="fg"><label>إلى تاريخ</label><input type="date" id="olTo"/></div>
   <button class="btn-main" onclick="submitOfficialLeave()" style="background:linear-gradient(135deg,var(--a3),#4338ca)">تسجيل الإجازة ✓</button>
@@ -675,7 +675,7 @@ const DB={
 // ========== STATE ==========
 const WH=9;
 let role='emp',me=null,gps=null,online=navigator.onLine,ctimer=null;
-let pendRec=null,detEmp=null,detFil='week',pendingShift=1;
+let pendRec=null,detEmp=null,detFil='week',pendingShift=1,pendingLeaveType='';
 let achrt=null,filterTitle_val='';
 let filterFrom=null,filterTo=null;
 
@@ -871,11 +871,14 @@ function getDeviceId(){
 }
 
 // Change password
-function openOfficialLeave(){
+function openLeaveDate(type){
   closeSheets();
+  pendingLeaveType=type;
   const td=new Date().toISOString().slice(0,10);
   document.getElementById('olFrom').value=td;
   document.getElementById('olTo').value=td;
+  const title=document.getElementById('leaveDateTitle');
+  if(title)title.textContent='🌴 '+type+' — تحديد الفترة';
   openSheet('shOfficialLeave');
 }
 
@@ -892,7 +895,7 @@ function submitOfficialLeave(){
   while(d<=end){
     const dow=d.getDay();
     if(dow!==5&&dow!==6){
-      const rec={name:me.name,kind:'leave',sub:'رسمية',time:d.getTime(),lat:0,lng:0,offline:!online,date:d.toDateString()};
+      const rec={name:me.name,kind:'leave',sub:pendingLeaveType||'إجازة',time:d.getTime(),lat:0,lng:0,offline:!online,date:d.toDateString()};
       if(!DB.rec.some(r=>r.name===me.name&&r.date===d.toDateString()&&r.kind==='leave')){
         DB.rec.push(rec);
         if(online)DB.pushToFirebase(rec);else DB.pend.push(rec);
