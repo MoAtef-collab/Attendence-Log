@@ -453,6 +453,15 @@ canvas{max-height:160px}
   </div>
 </div>
 
+<!-- CANCEL LEAVE SHEET -->
+<div class="sheet" id="shCancelLeave">
+  <div class="shandle"></div>
+  <h3>🗑️ إلغاء إجازة</h3>
+  <p style="text-align:center;color:var(--muted);font-size:.85rem;margin-bottom:1rem">نوع الإجازة: <strong id="clSub" style="color:var(--purple)"></strong></p>
+  <div class="fg"><label>اختر اليوم المراد إلغاؤه</label><input type="date" id="clDate"/></div>
+  <button class="btn-main" onclick="submitCancelLeave()" style="background:linear-gradient(135deg,var(--red),#cc2233)">إلغاء الإجازة ✓</button>
+</div>
+
 <!-- MGR PASS SHEET -->
 <div class="sheet" id="shMgrPass">
   <div class="shandle"></div><h3>🔐 تغيير كلمة مرور المدير</h3>
@@ -970,25 +979,60 @@ function cancelLastRec(idx){
   const myR=DB.rec.filter(r=>r.name===me?.name&&r.date===today);
   const rec=myR[idx];
   if(!rec){toast('لا يمكن الإلغاء','e');return;}
+  // For leave records — show date picker to choose which day to cancel
+  if(rec.kind==='leave'){
+    openCancelLeaveSheet(rec.sub);
+    return;
+  }
   const now=Date.now();
   if(now-rec.time>5*60*1000){toast('انتهت مهلة الإلغاء (5 دقائق)','e');return;}
-  const i=DB.rec.indexOf(rec);
-  if(i>-1){
-    DB.rec.splice(i,1);
-    // Remove from firebase if has fbId
-    if(rec.fbId&&window.fbReady){
-      const{db,doc,deleteDoc}=window.FS;
-      deleteDoc(doc(db,'attendance',rec.fbId)).catch(()=>{});
-    }
-    DB.save();
-  }
+  deleteRecordLocally(rec);
   renderLog();checkDayDone();
-  // Re-enable drag if needed
   document.getElementById('dcirc').classList.remove('disabled');
   document.getElementById('doneBanner').style.display='none';
   document.getElementById('dlbl').textContent='اسحب';
   document.getElementById('dsub').textContent='للتسجيل';
   toast('✓ تم إلغاء البصمة','s');
+}
+
+function deleteRecordLocally(rec){
+  const i=DB.rec.indexOf(rec);
+  if(i>-1){
+    DB.rec.splice(i,1);DB.save();
+    if(rec.fbId&&window.fbReady){
+      const{db,doc,deleteDoc}=window.FS;
+      deleteDoc(doc(db,'attendance',rec.fbId)).catch(()=>{});
+    } else if(window.fbReady){
+      const{db,collection,query,where,getDocs,deleteDoc,doc}=window.FS;
+      const q=query(collection(db,'attendance'),
+        where('name','==',rec.name),
+        where('time','==',rec.time),
+        where('kind','==',rec.kind)
+      );
+      getDocs(q).then(snap=>{
+        snap.forEach(d=>deleteDoc(doc(db,'attendance',d.id)));
+      }).catch(()=>{});
+    }
+  }
+}
+
+// Cancel leave by selected date
+function openCancelLeaveSheet(sub){
+  const td=new Date().toISOString().slice(0,10);
+  document.getElementById('clDate').value=td;
+  document.getElementById('clSub').textContent=sub||'إجازة';
+  openSheet('shCancelLeave');
+}
+
+function submitCancelLeave(){
+  const dateVal=document.getElementById('clDate').value;
+  if(!dateVal){toast('اختر التاريخ','e');return;}
+  const targetDate=new Date(dateVal).toDateString();
+  const rec=DB.rec.find(r=>r.name===me?.name&&r.date===targetDate&&r.kind==='leave');
+  if(!rec){toast('لا يوجد إجازة في هذا التاريخ','e');return;}
+  deleteRecordLocally(rec);
+  closeSheets();renderLog();
+  toast('✓ تم إلغاء إجازة '+dateVal,'s');
 }
 
 function disableDrag(){
@@ -1086,7 +1130,7 @@ function getDir(dx,dy){
 
 // ========== SHEETS ==========
 function openSheet(id){document.getElementById('overlay').style.display='block';document.getElementById(id).style.display='block';}
-function closeSheets(){document.getElementById('overlay').style.display='none';['shIn','shOut','shLeave','shChPass','shOfficialLeave','shMgrPass'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});}
+function closeSheets(){document.getElementById('overlay').style.display='none';['shIn','shOut','shLeave','shChPass','shOfficialLeave','shMgrPass','shCancelLeave'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});}
 
 function pickType(kind,sub){
   closeSheets();
@@ -1367,8 +1411,26 @@ function delRec(name,idx){
   const rec=recs[recs.length-1-idx];
   if(!rec)return;
   const i=DB.rec.indexOf(rec);
-  if(i>-1){DB.rec.splice(i,1);DB.save();}
-  loadEmpRecs();toast('✓ تم حذف السجل','s');
+  if(i>-1){
+    DB.rec.splice(i,1);DB.save();
+    // Delete from Firebase
+    if(rec.fbId&&window.fbReady){
+      const{db,doc,deleteDoc}=window.FS;
+      deleteDoc(doc(db,'attendance',rec.fbId)).catch(e=>console.warn('FB del failed:',e));
+    } else if(window.fbReady){
+      // No fbId — search Firebase by name+time+kind
+      const{db,collection,query,where,getDocs,deleteDoc,doc}=window.FS;
+      const q=query(collection(db,'attendance'),
+        where('name','==',rec.name),
+        where('time','==',rec.time),
+        where('kind','==',rec.kind)
+      );
+      getDocs(q).then(snap=>{
+        snap.forEach(d=>deleteDoc(doc(db,'attendance',d.id)));
+      }).catch(e=>console.warn('FB del failed:',e));
+    }
+  }
+  loadEmpRecs();renderBoard();toast('✓ تم حذف السجل','s');
 }
 
 // ========== SYNC/EXPORT ==========
