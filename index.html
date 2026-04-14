@@ -23,7 +23,9 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const db = getFirestore(app);
+enableIndexedDbPersistence(db).catch(err => console.log('Persistence error:', err));
 const auth = getAuth(app);
 
 window.FS = { db, auth, collection, addDoc, getDocs, deleteDoc, doc, query, where, onSnapshot, setDoc, getDoc, serverTimestamp, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut };
@@ -1059,12 +1061,18 @@ const DB={
     }catch(e){}
   },
 
-  async pullRecords(){
-    try{
-      if(!window.fbReady||!window.currentFirebaseUser)return;
-      const {db,collection,getDocs}=window.FS;
-      const snap=await getDocs(collection(db,'attendance'));
-      const fbRecs=snap.docs.map(d=>({...d.data(),fbId:d.id}));
+  async pullRecords(role='emp'){
+  try{
+    if(!window.fbReady||!window.currentFirebaseUser)return;
+    const {db,collection,getDocs,query,where}=window.FS;
+    const days = role==='mgr' ? 30 : 7;
+    const since = Date.now() - (days * 86400000);
+    const q = query(
+      collection(db,'attendance'),
+      where('time','>=',since)
+    );
+    const snap=await getDocs(q);
+    const fbRecs=snap.docs.map(d=>({...d.data(),fbId:d.id}));
 
       fbRecs.forEach(fr=>{
         if(!fr.shiftNo)fr.shiftNo=1;
@@ -1148,11 +1156,13 @@ const DB={
     }
   },
 
-startRealtimeListener(){
+startRealtimeListener(role='emp'){
   if(!window.fbReady || !window.currentFirebaseUser)return;
-    const {db,collection,onSnapshot}=window.FS;
-
-    onSnapshot(collection(db,'attendance'),snap=>{
+  if(role !== 'mgr') return; // الموظف مش محتاج listener
+  const {db,collection,onSnapshot,query,where}=window.FS;
+  const since = Date.now() - (30 * 86400000);
+  const q = query(collection(db,'attendance'), where('time','>=',since));
+  onSnapshot(q, snap=>{
       snap.docChanges().forEach(change=>{
         if(change.type==='added'){
           const fr={...change.doc.data(),fbId:change.doc.id};
@@ -1180,18 +1190,14 @@ startRealtimeListener(){
 };
 let _fbBootDone = false;
 
-async function bootFirebaseAfterLogin() {
+async function bootFirebaseAfterLogin(role='emp') {
   const user = window.currentFirebaseUser || window.FS?.auth?.currentUser;
   if (!window.fbReady || !user) return;
-
-  // ensure the global is set
   window.currentFirebaseUser = user;
-
   if (_fbBootDone) return;
   _fbBootDone = true;
-
-  await DB.pullRecords();
-  DB.startRealtimeListener();
+  await DB.pullRecords(role);
+  DB.startRealtimeListener(role);
   autoSync();
 }
 
@@ -1215,7 +1221,7 @@ window.addEventListener('authStateChanged', async (e) => {
     return;
   }
 
-  await bootFirebaseAfterLogin();
+  await bootFirebaseAfterLogin('emp');
 });
 
  
@@ -1260,7 +1266,7 @@ window.currentFirebaseUser = cred.user; // important
       }
 
       appState.currentUser={name:'المدير',role:'mgr',email};
-await bootFirebaseAfterLogin();
+await bootFirebaseAfterLogin('mgr');
 btn.disabled=false;
       btnText.textContent='دخول';
       goTo('pgMgr');
@@ -1305,22 +1311,52 @@ btn.disabled=false;
         localStorage.setItem('attendly_emps',JSON.stringify(EMPLOYEES));
       }
 
-      emp=EMPLOYEES.find(e=>
-        e.active!==false &&
-        !e.archived &&
-        (
-          (e.email&&e.email.toLowerCase()===email) ||
-          (e.firebaseUid&&fbUser&&e.firebaseUid===fbUser.uid)
-        )
-      );
+emp = EMPLOYEES.find(e =>
+  e.active !== false &&
+  !e.archived &&
+  (
+    (e.email && e.email.toLowerCase() === email) ||
+    (e.firebaseUid && fbUser && e.firebaseUid === fbUser.uid)
+  )
+);
 
-      if(!emp){
-        await window.FS.signOut(window.FS.auth);
-        btn.disabled=false;
-        btnText.textContent='دخول';
-        toast(MSG.userNotFound,'error');
-        return;
-      }
+// لو مش لاقيه بالإيميل أو الـ uid، دور بالـ uid بس من Firebase
+if(!emp && fbUser) {
+  emp = EMPLOYEES.find(e =>
+    e.active !== false &&
+    !e.archived &&
+    e.firebaseUid === fbUser.uid
+  );
+}
+
+// لو لسه مش لاقيه، يمكن الإيميل اتحفظ بـ case مختلف
+if(!emp && fbUser) {
+  emp = EMPLOYEES.find(e =>
+    e.active !== false &&
+    !e.archived &&
+    e.email?.trim().toLowerCase() === email.trim().toLowerCase()
+  );
+}
+
+// لو لاقيه وعنده بيانات ناقصة، حدّثها في Firestore
+if(emp) {
+  let needsUpdate = false;
+  if(!emp.email) { emp.email = email; needsUpdate = true; }
+  if(!emp.firebaseUid && fbUser) { emp.firebaseUid = fbUser.uid; needsUpdate = true; }
+  if(needsUpdate) {
+    await DB.saveEmployeesToFirebase(
+      EMPLOYEES.map(e => { const c={...e}; delete c.pass; return c; })
+    );
+  }
+}
+
+if(!emp){
+  await window.FS.signOut(window.FS.auth);
+  btn.disabled = false;
+  btnText.textContent = 'دخول';
+  toast(MSG.userNotFound, 'error');
+  return;
+}
     }
 
     // الحالة 2: المستخدم أدخل كود أو اسم
