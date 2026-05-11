@@ -492,10 +492,6 @@ canvas{max-height:150px}
 <span class="ftag active" onclick="filterByTitle('',this)">الكل</span>
 <span class="ftag" onclick="filterByTitle('وكيل',this)">وكيل</span>
 <span class="ftag" onclick="filterByTitle('إشراف',this)">إشراف</span>
-<span class="ftag" onclick="filterByTitle('مديرة',this)">مديرة</span>
-<span class="ftag" onclick="filterByTitle('UPA',this)">UPA</span>
-<span class="ftag" onclick="filterByTitle('كلينيكال',this)">كلينيكال</span>
-<span class="ftag" onclick="filterByTitle('جودة',this)">جودة</span>
 </div>
 <div class="filter-tags" style="margin-top:.4rem" id="deptFilterTags">
 <span class="ftag active" onclick="filterByDept('',this)">كل الأقسام</span>
@@ -964,29 +960,49 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
     }catch(e){}
   },
 
-  async saveEmployeesToSupabase(emps){
-    try{
-      const rows = emps.map(e => ({
-        id: e.id,
-        name: e.name,
-        code: e.code||'',
-        dept: e.dept||'',
-        title: e.title||'',
-        phone: e.phone||'',
-        email: e.email||null,
-        authUid: e.authUid||null,
-        device_id: e.deviceId||null,
-        active: e.active!==false,
-        archived: e.archived||false,
-        color: e.color||'',
-        ini: e.ini||''
-      }));
-      const { error } = await supabase
-        .from('employees')
-        .upsert(rows, { onConflict: 'id' });
-      if(error) console.error('saveEmployees error:', error);
-    }catch(e){}
-  },
+ async saveEmployeesToSupabase(emps){
+
+  try{
+
+    const rows = emps.map(e => ({
+      id: e.id,
+      name: e.name,
+      code: e.code || '',
+      dept: e.dept || '',
+      title: e.title || '',
+      phone: e.phone || '',
+      email: e.email || null,
+
+      // IMPORTANT
+      auth_uid: e.authUid || null,
+
+      device_id: e.deviceId || null,
+      active: e.active !== false,
+      archived: e.archived || false,
+      color: e.color || '',
+      ini: e.ini || ''
+    }));
+
+    console.log('EMPLOYEE PAYLOAD:', rows);
+
+    const { data, error } = await supabase
+      .from('employees')
+      .upsert(rows)
+      .select();
+
+    console.log('UPSERT RESULT:', data);
+    console.log('UPSERT ERROR:', error);
+
+    if(error) throw error;
+
+    return data;
+
+  }catch(e){
+
+    console.error('SAVE EMPLOYEES ERROR:', e);
+
+  }
+},
 
   async loadEmployeesFromSupabase(){
     try{
