@@ -1214,11 +1214,20 @@ if (!mgrData) {
       btnText.textContent='دخول';
       goTo('pgMgr');
       initManager();
-    }catch(e){
-      btn.disabled=false;
-      btnText.textContent='دخول';
-      toast(MSG.wrongMgrPass,'error');
-    }
+   }catch(e){
+
+  console.error('MANAGER LOGIN ERROR:', e);
+
+  btn.disabled = false;
+  btnText.textContent = 'دخول';
+
+  toast(
+    e?.message ||
+    e?.error_description ||
+    'manager login failed',
+    'error'
+  );
+}
     return;
   }
 
@@ -1451,15 +1460,20 @@ window.currentUser = data.user;
     goTo('pgEmp');
     initEmployee();
 
-  }catch(e){
-    btn.disabled=false;
-    btnText.textContent='حفظ والدخول';
-    if(e.message?.includes('already registered')){
-      toast('البريد مستخدم بالفعل','error');
-    }else{
-      toast('حدث خطأ','error');
-    }
-  }
+}catch(e){
+
+  console.error('EMPLOYEE SIGNUP ERROR:', e);
+
+  btn.disabled = false;
+  btnText.textContent = 'حفظ والدخول';
+
+  toast(
+    e?.message ||
+    e?.error_description ||
+    'signup failed',
+    'error'
+  );
+}
 }
 
 async function validateEmployeeDevice(emp){
