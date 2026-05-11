@@ -17,6 +17,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 window.SB = supabase;
+window.supabase = supabase;
 
 supabase.auth.onAuthStateChange((event, session) => {
   window.currentUser = session?.user || null;
@@ -310,12 +311,12 @@ canvas{max-height:150px}
 </div>
 <div class="card">
 <div class="role-tabs">
-<button class="role-tab active" id="tabEmp" onclick="switchRole('emp')">👤 موظف</button>
+<button class="role-tab active" id="tabEmp" onclick="switchRole('emp')">👤 صيدلي</button>
 <button class="role-tab" id="tabMgr" onclick="switchRole('mgr')">🎯 مدير</button>
 </div>
 <div id="empLoginFields">
 <div class="fg">
-<label>كود الموظف أو البريد الإلكتروني</label>
+<label>كود الصيدلي أو البريد الإلكتروني</label>
 <input id="loginIdentifier" type="text" placeholder="الكود أو example@gmail.com">
 </div>
 <div class="fg">
@@ -355,7 +356,7 @@ canvas{max-height:150px}
 </div>
 <div class="card">
 <div class="fg"><label>الاسم</label><input id="firstLoginName" type="text" readonly style="opacity:.6"></div>
-<div class="fg"><label>كود الموظف</label><input id="firstLoginCode" type="text" readonly style="opacity:.6"></div>
+<div class="fg"><label>كود الصيدلي</label><input id="firstLoginCode" type="text" readonly style="opacity:.6"></div>
 <div class="fg"><label>البريد الإلكتروني</label><input id="firstLoginEmail" type="email" placeholder="example@gmail.com"><div class="fg-hint">سيُستخدم لاستعادة كلمة المرور</div></div>
 <div class="fg"><label>كلمة مرور جديدة</label><input id="firstLoginNewPass" type="password" placeholder="6 أحرف على الأقل"><div class="fg-hint">لا تستخدم تاريخ ميلادك أو اسمك</div></div>
 <div class="fg"><label>تأكيد كلمة المرور</label><input id="firstLoginConfPass" type="password" placeholder="أعد كتابة كلمة المرور"></div>
@@ -399,7 +400,7 @@ canvas{max-height:150px}
 <div id="pgEmp" class="page">
 <div class="topbar">
 <div class="topbar-info">
-<h2 id="empName">موظف</h2>
+<h2 id="empName">صيدلي</h2>
 <p id="empTitle">--</p>
 </div>
 <div class="topbar-actions">
@@ -505,7 +506,7 @@ canvas{max-height:150px}
 <span class="ftag" onclick="filterByDept('صيدلية التأمين الصحي',this)">التأمين الصحي</span>
 <span class="ftag" onclick="filterByDept('صيدلية نفقة الدولة الخارجي',this)">نفقة الدولة</span>
 </div>
-<input class="filter-search" type="text" id="empSearch" placeholder="🔍 ابحث عن موظف..." oninput="renderBoard()">
+<input class="filter-search" type="text" id="empSearch" placeholder="🔍 ابحث عن صيدلي..." oninput="renderBoard()">
 </div>
 <div class="chart-card">
 <div class="chart-header">
@@ -531,7 +532,7 @@ canvas{max-height:150px}
 </div>
 </div>
 <div class="emp-list-card">
-<div class="sec-label" style="margin-bottom:.7rem">👥 الموظفون — <span id="boardDateLabel"></span></div>
+<div class="sec-label" style="margin-bottom:.7rem">👥 الصيادلة — <span id="boardDateLabel"></span></div>
 <div id="empList"></div>
 </div>
 </div>
@@ -540,7 +541,7 @@ canvas{max-height:150px}
 
 <div id="pgDetail" class="page">
 <div class="topbar">
-<div class="topbar-info"><h2 id="detailEmpName">--</h2><p>ملف الموظف</p></div>
+<div class="topbar-info"><h2 id="detailEmpName">--</h2><p>ملف الصيدلي</p></div>
 <button class="ibtn" onclick="goTo('pgMgr')">←</button>
 </div>
 <div class="scroll">
@@ -586,13 +587,13 @@ canvas{max-height:150px}
 <div class="scroll">
 <div class="admin-body">
 <div class="admin-tabs">
-<span class="atab active" onclick="switchAdminTab('secEmps',this)">👥 الموظفون</span>
+<span class="atab active" onclick="switchAdminTab('secEmps',this)">👥 الصيادلة</span>
 <span class="atab" onclick="switchAdminTab('secRecs',this)">📋 السجلات</span>
 </div>
 <div class="admin-sec active" id="secEmps">
 <div class="add-form">
-<h4>➕ إضافة موظف جديد</h4>
-<div class="fg"><label>الاسم الكامل</label><input id="newEmpName" type="text" placeholder="اسم الموظف"></div>
+<h4>➕ إضافة صيدلي جديد</h4>
+<div class="fg"><label>الاسم الكامل</label><input id="newEmpName" type="text" placeholder="اسم الصيدلي"></div>
 <div class="fg"><label>كود البصمة</label><input id="newEmpCode" type="text" placeholder="مثال: 2745"></div>
 <div class="fg"><label>القسم</label>
 <select id="newEmpDept">
@@ -609,7 +610,7 @@ canvas{max-height:150px}
 <div id="empAdminList"></div>
 </div>
 <div class="admin-sec" id="secRecs">
-<div class="fg"><label>اختر موظف</label>
+<div class="fg"><label>اختر صيدلي</label>
 <select id="recEmpSelect" onchange="loadEmpRecords()"><option value="">-- اختر --</option></select>
 </div>
 <div id="recsList"></div>
@@ -721,7 +722,7 @@ cancelExpired:'انتهت مهلة الإلغاء (5 دقائق)',
 synced:'تمت المزامنة بنجاح',
 resetSent:'تم إرسال رابط الاستعادة',
 passChanged:'تم تغيير كلمة المرور بنجاح',
-empAdded:'تمت إضافة الموظف بنجاح',
+empAdded:'تمت إضافة الصيدلي بنجاح',
 recDeleted:'تم حذف السجل بنجاح',
 noLeaveDate:'يرجى اختيار التاريخ',
 dateRangeErr:'تاريخ البداية أكبر من النهاية',
@@ -817,31 +818,6 @@ return{status:'absent',detail:'غائب'};
 const COLORS=['rgba(62,207,178,.2)','rgba(99,102,241,.2)','rgba(249,115,22,.2)','rgba(234,179,8,.2)','rgba(168,85,247,.2)','rgba(239,68,68,.2)','rgba(59,130,246,.2)','rgba(16,185,129,.2)','rgba(245,158,11,.2)'];
 
 const DEFAULT_EMPLOYEES=[
-{name:'هبة عبد السميع',code:'',dept:'',title:'وكيل',phone:'+201227416980'},
-{name:'هبة عبد القادر',code:'',dept:'',title:'مديرة الصيدلية',phone:'+201288735663'},
-{name:'نيفين',code:'',dept:'',title:'وكيل',phone:'+201273617283'},
-{name:'نورهان حمدي',code:'',dept:'',title:'وكيل',phone:'+201098909199'},
-{name:'نرمين نعمان',code:'',dept:'',title:'',phone:'+201013308152'},
-{name:'أحمد متولي',code:'',dept:'',title:'إشراف',phone:'+201127190570'},
-{name:'آلاء عطية',code:'',dept:'',title:'',phone:'+201026846960'},
-{name:'بهاء باسم',code:'',dept:'',title:'',phone:'+201281694246'},
-{name:'دعاء يحيى',code:'',dept:'',title:'إشراف',phone:'+201007562239'},
-{name:'ايستر وجدي',code:'',dept:'',title:'UPA',phone:'+201284871198'},
-{name:'فاتن نبوي',code:'',dept:'',title:'كلينيكال',phone:'+201011350559'},
-{name:'هاجر محمد',code:'',dept:'',title:'UPA',phone:'+201000786441'},
-{name:'هايدي مصطفى',code:'',dept:'',title:'إشراف',phone:'+201095788333'},
-{name:'هيثم حمد',code:'',dept:'',title:'',phone:'+201028337567'},
-{name:'حسام محمد',code:'',dept:'',title:'UPA',phone:'+201025907344'},
-{name:'مديحة محمد',code:'',dept:'',title:'إشراف',phone:'+201018664432'},
-{name:'منال',code:'',dept:'',title:'جودة',phone:'+201125469748'},
-{name:'نورهان عارف',code:'',dept:'',title:'',phone:'+201127457733'},
-{name:'أمنية عبدالحميد',code:'',dept:'',title:'',phone:'+201016965450'},
-{name:'رشا عادل',code:'',dept:'',title:'',phone:'+201006428239'},
-{name:'رشا ممدوح',code:'',dept:'',title:'',phone:'+201002784274'},
-{name:'روان عسكر',code:'',dept:'',title:'',phone:'+201006605867'},
-{name:'شيماء فهمي',code:'',dept:'',title:'',phone:'+201114299632'},
-{name:'شيماء فرج',code:'',dept:'',title:'',phone:'+201115332674'},
-{name:'ولاء',code:'',dept:'',title:'',phone:'+201003621293'},
 {name:'بسملة ابراهيم',code:'2745',dept:'صيدلية العمليات الكبرى',title:'',phone:''},
 {name:'رضوي احمد عبد الحميد',code:'2365',dept:'صيدلية العمليات الكبرى',title:'',phone:''},
 {name:'منه الله سعيد عيد',code:'2506',dept:'صيدلية العمليات الكبرى',title:'',phone:''},
@@ -875,14 +851,14 @@ const DEFAULT_EMPLOYEES=[
 {name:'مروة مصطفى أيوب محمود',code:'2062',dept:'صيدلية التأمين الصحي',title:'',phone:''},
 {name:'أسماء على احمد محمد',code:'3337',dept:'صيدلية التأمين الصحي',title:'',phone:''},
 {name:'محمد اشرف محمود عبد المجيد',code:'2140',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'سالي فيكتور جرجس ناشد',code:'2103',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد عبد التواب حسانين',code:'2513',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'ميرنا عماد زكي قزمان',code:'3316',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'سلمى جمال حسن محمد',code:'3264',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'اسلام احمد محمود',code:'2376',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'اسماء عبدالرحمن حسنين علي',code:'3264',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'داليا عماد محمد كمال',code:'2376',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد ابراهيم حسنين',code:'2132',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'سارة الشحات عبده',code:'2485',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'محمد عاطف',code:'2953',dept:'',title:'',phone:''},
+{name:'محمد رفعت محمد',code:'2953',dept:'كلينيكال',title:'',phone:''},
 ];
 
 function getInitials(n){const p=n.trim().split(' ');return p.length>=2?p[0][0]+'.'+p[1][0]:p[0].slice(0,2);}
@@ -1598,7 +1574,7 @@ function formatDuration(ms){const h=Math.floor(ms/3600000),m=Math.floor((ms%3600
 function initEmployee(){
 const emp=appState.currentUser;
 document.getElementById('empName').textContent=emp.name;
-document.getElementById('empTitle').textContent=emp.title||emp.dept||'موظف';
+document.getElementById('empTitle').textContent=emp.title||emp.dept||'صيدلي';
 startClock();requestGPS();updateNetPill();renderDayLog();updateStatusBanner();updateActionButtons();
 }
 
@@ -1791,7 +1767,7 @@ const wa=emp.phone?`<button class="emp-act-btn emp-act-wa" onclick="event.stopPr
 const cp=emp.phone?`<button class="emp-act-btn emp-act-copy" onclick="event.stopPropagation();copyPhone('${emp.phone}')">نسخ</button>`:'';
 return`<div class="emp-row ${rc}" onclick="openDetail('${emp.id}')"><div class="emp-av" style="background:${emp.color}">${sanitize(emp.ini)}</div><div class="emp-info"><h5>${sanitize(emp.name)}</h5><p>${sanitize(emp.dept||emp.title||'')}</p><div class="emp-actions">${wa}${cp}</div></div><div class="emp-status">${statusHtml}</div><span class="emp-chevron">‹</span></div>`;
 }).join('');
-document.getElementById('empList').innerHTML=rows||'<div style="color:var(--muted);text-align:center;padding:1rem">لا يوجد موظفون</div>';
+document.getElementById('empList').innerHTML=rows||'<div style="color:var(--muted);text-align:center;padding:1rem">لا يوجد صيادلة</div>';
 document.getElementById('statPresent').textContent=present;document.getElementById('statAbsent').textContent=absent;document.getElementById('statLate').textContent=late;document.getElementById('statLeave').textContent=onLeave;
 if(DB.pending.length){document.getElementById('pendingCard').style.display='block';document.getElementById('pendingList').innerHTML=DB.pending.map(p=>`<div class="pend-row"><span>${sanitize(p.empName)}</span><span>${sanitize(p.sub)}</span></div>`).join('');}else{document.getElementById('pendingCard').style.display='none';}
 }
@@ -1836,7 +1812,7 @@ else{const w=window.open('','_blank');const title=scope==='today'?`تقرير ي
 }
 
 // ===== DETAIL =====
-function openDetail(empId){appState.detailEmployee=EMPLOYEES.find(e=>e.id===empId);if(!appState.detailEmployee)return;appState.histFilter='week';document.querySelectorAll('.hftab').forEach((t,i)=>t.classList.toggle('active',i===0));const emp=appState.detailEmployee;document.getElementById('detailEmpName').textContent=emp.name;document.getElementById('detailAv').textContent=emp.ini;document.getElementById('detailAv').style.background=emp.color;document.getElementById('detailName2').textContent=emp.name;document.getElementById('detailTitle2').textContent=emp.title||'موظف';document.getElementById('detailDept2').textContent=emp.dept||'';calcDetailKPIs();buildWeekBars();renderHistLog();goTo('pgDetail');}
+function openDetail(empId){appState.detailEmployee=EMPLOYEES.find(e=>e.id===empId);if(!appState.detailEmployee)return;appState.histFilter='week';document.querySelectorAll('.hftab').forEach((t,i)=>t.classList.toggle('active',i===0));const emp=appState.detailEmployee;document.getElementById('detailEmpName').textContent=emp.name;document.getElementById('detailAv').textContent=emp.ini;document.getElementById('detailAv').style.background=emp.color;document.getElementById('detailName2').textContent=emp.name;document.getElementById('detailTitle2').textContent=emp.title||'صيدلي';document.getElementById('detailDept2').textContent=emp.dept||'';calcDetailKPIs();buildWeekBars();renderHistLog();goTo('pgDetail');}
 
 function calcDetailKPIs(){
 const emp=appState.detailEmployee,now=Date.now(),DAY=86400000;const ms=new Date();ms.setDate(1);ms.setHours(0,0,0,0);
@@ -1896,7 +1872,7 @@ async function adminResetDevice(i){
   renderEmpAdmin();
   toast('✓ تم إعادة تعيين الجهاز','success');
 }
-function adminToggleActive(i){EMPLOYEES[i].active=EMPLOYEES[i].active===false?true:false;saveEmployees();renderEmpAdmin();toast(EMPLOYEES[i].active?'✓ تم تفعيل الموظف':'✓ تم تعطيل الموظف','success');}
+function adminToggleActive(i){EMPLOYEES[i].active=EMPLOYEES[i].active===false?true:false;saveEmployees();renderEmpAdmin();toast(EMPLOYEES[i].active?'✓ تم تفعيل الصيدلي':'✓ تم تعطيل الصيدلي','success');}
 
 async function addEmployee(){
 const name=document.getElementById('newEmpName').value.trim(),code=document.getElementById('newEmpCode').value.trim(),dept=document.getElementById('newEmpDept').value,title=document.getElementById('newEmpTitle').value.trim(),phone=document.getElementById('newEmpPhone').value.trim();
