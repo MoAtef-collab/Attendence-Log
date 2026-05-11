@@ -998,7 +998,7 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
         title: e.title||'',
         phone: e.phone||'',
         email: e.email||null,
-        firebase_uid: e.firebaseUid||null,
+        authUid: e.authUid||null,
         device_id: e.deviceId||null,
         active: e.active!==false,
         archived: e.archived||false,
@@ -1027,7 +1027,7 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
         title: e.title||'',
         phone: e.phone||'',
         email: e.email||null,
-        firebaseUid: e.firebase_uid||null,
+        authUid: e.authUid||null,
         deviceId: e.device_id||null,
         active: e.active!==false,
         archived: e.archived||false,
@@ -1052,14 +1052,14 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
         empId: data.emp_id,
         empName: data.emp_name,
         email: data.email,
-        firebaseUid: data.firebase_uid
+        authUid: data.authUid
       };
     }catch(e){ return null; }
   },
 
   async setDeviceLock(emp, deviceId){
     try{
-      const uid = emp.firebaseUid || window.currentUser?.id;
+      const uid = emp.authUid || window.currentUser?.id;
       if(!uid) return false;
       const { error } = await supabase
         .from('device_locks')
@@ -1068,7 +1068,7 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
           emp_id: emp.id,
           emp_name: emp.name||'',
           email: (emp.email||'').toLowerCase(),
-          firebase_uid: uid,
+          authUid: uid,
           device_id: deviceId,
           active: true,
           updated_at: new Date().toISOString()
@@ -1189,19 +1189,24 @@ async function doLogin(){
       if(error) throw error;
       window.currentUser = data.user;
 
-      const { data: mgrData } = await supabase
-        .from('managers')
-        .select('email')
-        .eq('email', email)
-        .single();
+     const { data: mgrData, error: mgrError } = await supabase
+  .from('managers')
+  .select('*')
+  .eq('email', email)
+  .maybeSingle();
 
-      if(!mgrData){
-        await supabase.auth.signOut();
-        btn.disabled=false;
-        btnText.textContent='دخول';
-        toast('ليس حساب مدير','error');
-        return;
-      }
+if (mgrError) {
+  console.error('Manager lookup error:', mgrError);
+  throw mgrError;
+}
+
+if (!mgrData) {
+  await supabase.auth.signOut();
+  btn.disabled = false;
+  btnText.textContent = 'دخول';
+  toast('هذا الحساب ليس مديراً', 'error');
+  return;
+}
 
       appState.currentUser={name:'المدير',role:'mgr',email};
       await bootSupabaseAfterLogin('mgr');
@@ -1249,21 +1254,21 @@ async function doLogin(){
         e.active!==false && !e.archived &&
         (
           (e.email && e.email.toLowerCase()===email) ||
-          (e.firebaseUid && data.user && e.firebaseUid===data.user.id)
+          (e.authUid && data.user && e.authUid===data.user.id)
         )
       );
 
       if(!emp && data.user){
         emp = EMPLOYEES.find(e=>
           e.active!==false && !e.archived &&
-          e.firebaseUid === data.user.id
+          e.authUid === data.user.id
         );
       }
 
       if(emp){
         let needsUpdate = false;
         if(!emp.email){ emp.email=email; needsUpdate=true; }
-        if(!emp.firebaseUid && data.user){ emp.firebaseUid=data.user.id; needsUpdate=true; }
+        if(!emp.authUid && data.user){ emp.authUid=data.user.id; needsUpdate=true; }
         if(needsUpdate){
           await DB.saveEmployeesToSupabase(
             EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
@@ -1288,7 +1293,7 @@ async function doLogin(){
         return;
       }
 
-      if(emp.firebaseUid||emp.email){
+      if(emp.authUid||emp.email){
         const { data, error } = await supabase.auth.signInWithPassword({
           email: emp.email,
           password: pass
@@ -1326,7 +1331,7 @@ async function doLogin(){
         (
           e.id===emp.id ||
           (e.email && authUser && e.email.toLowerCase()===authUser.email?.toLowerCase()) ||
-          (e.firebaseUid && authUser && e.firebaseUid===authUser.id)
+          (e.authUid && authUser && e.authUid===authUser.id)
         )
       )||emp;
     }
@@ -1355,8 +1360,8 @@ async function doLogin(){
       );
     }
 
-    if(window.currentUser && !emp.firebaseUid){
-      emp.firebaseUid=window.currentUser.id;
+    if(window.currentUser && !emp.authUid){
+      emp.authUid=window.currentUser.id;
       await DB.saveEmployeesToSupabase(
         EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
       );
@@ -1403,11 +1408,28 @@ async function doFirstLogin(){
   btn.disabled=true;
 
   try{
-    const { data, error } = await supabase.auth.signUp({ email, password: pass });
-    if(error) throw error;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: pass
+  });
 
-    emp.email=email;
-    emp.firebaseUid=data.user.id;
+  console.log('SIGNUP RESULT:', data);
+  console.log('SIGNUP ERROR:', error);
+
+  if(error) throw error;
+
+  // IMPORTANT
+  if (!data.session) {
+    btn.disabled = false;
+    btnText.textContent = 'حفظ والدخول';
+
+    
+
+    return;
+  }
+
+  emp.email = email;
+  emp.authUid = data.user.id;
     emp.deviceId=getDeviceId();
 
     localStorage.setItem('attendly_emps', JSON.stringify(
@@ -1420,7 +1442,8 @@ async function doFirstLogin(){
 
     await DB.setDeviceLock(emp, emp.deviceId);
 
-    window.currentUser = data.user;
+
+window.currentUser = data.user;
     appState.currentUser={...emp,role:'emp'};
     btn.disabled=false;
     btnText.textContent='حفظ والدخول';
@@ -1441,7 +1464,7 @@ async function doFirstLogin(){
 
 async function validateEmployeeDevice(emp){
   const devId=getDeviceId();
-  const uid=emp.firebaseUid||window.currentUser?.id;
+  const uid=emp.authUid||window.currentUser?.id;
   const lock=await DB.getDeviceLock(uid);
 
   if(lock && lock.active!==false && lock.deviceId){
@@ -1507,39 +1530,49 @@ async function doForgotPass(){
   }
 }
 
-async function doChangePass(){
-  const email=document.getElementById('changePassEmail').value.trim();
-  const oldP=document.getElementById('changePassOld').value;
-  const newP=document.getElementById('changePassNew').value;
-  const conf=document.getElementById('changePassConf').value;
+async function doChangePass() {
+  const newP = document.getElementById('changePassNew').value;
+  const conf = document.getElementById('changePassConf').value;
 
-  if(!email){toast(MSG.enterEmail,'warning');return;}
-  if(newP.length<6){toast(MSG.shortPass,'warning');return;}
-  if(newP!==conf){toast(MSG.passMismatch,'warning');return;}
+  if (newP.length < 6) {
+    toast(MSG.shortPass, 'warning');
+    return;
+  }
 
-  const btn=document.getElementById('changePassBtn'),btnText=document.getElementById('changePassBtnText');
-  btnText.innerHTML='<span class="loading-spinner"></span>';
-  btn.disabled=true;
+  if (newP !== conf) {
+    toast(MSG.passMismatch, 'warning');
+    return;
+  }
 
-  try{
-    // أولاً تحقق من كلمة المرور القديمة
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email, password: oldP
+  const btn = document.getElementById('changePassBtn');
+  const btnText = document.getElementById('changePassBtnText');
+
+  btnText.innerHTML = '<span class="loading-spinner"></span>';
+  btn.disabled = true;
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+
+    if (!sessionData.session) {
+      throw new Error('No active session');
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password: newP
     });
-    if(signInError) throw signInError;
 
-    // بعدين غير كلمة المرور
-    const { error } = await supabase.auth.updateUser({ password: newP });
-    if(error) throw error;
+    if (error) throw error;
 
-    btn.disabled=false;
-    btnText.textContent='حفظ التغيير';
-    toast(MSG.passChanged,'success');
-    setTimeout(()=>goTo('pgLogin'),2000);
-  }catch(e){
-    btn.disabled=false;
-    btnText.textContent='حفظ التغيير';
-    toast(MSG.wrongPass,'error');
+    toast(MSG.passChanged, 'success');
+
+    setTimeout(() => goTo('pgLogin'), 1500);
+
+  } catch (e) {
+    console.error(e);
+    toast('فشل تغيير كلمة المرور', 'error');
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = 'حفظ التغيير';
   }
 }
 
@@ -1829,8 +1862,8 @@ function renderEmpAdmin(){document.getElementById('empAdminList').innerHTML=EMPL
 
 async function adminResetPass(i){
   const emp=EMPLOYEES[i];
-  const uid=emp.firebaseUid||null;
-  emp.firebaseUid=null;
+  const uid=emp.authUid||null;
+  emp.authUid=null;
   emp.deviceId=null;
   emp.email=null;
   saveEmployees();
@@ -1840,7 +1873,7 @@ async function adminResetPass(i){
 }
 async function adminResetDevice(i){
   const emp=EMPLOYEES[i];
-  const uid=emp.firebaseUid||null;
+  const uid=emp.authUid||null;
   emp.deviceId=null;
   saveEmployees();
   if(uid){
@@ -1855,7 +1888,7 @@ async function addEmployee(){
 const name=document.getElementById('newEmpName').value.trim(),code=document.getElementById('newEmpCode').value.trim(),dept=document.getElementById('newEmpDept').value,title=document.getElementById('newEmpTitle').value.trim(),phone=document.getElementById('newEmpPhone').value.trim();
 if(!name){toast(MSG.enterName,'warning');return;}
 const btn=document.getElementById('addEmpBtn'),btnText=document.getElementById('addEmpBtnText');btnText.innerHTML='<span class="loading-spinner"></span>';btn.disabled=true;
-const newEmp={name,code,dept,title,phone,id:'emp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),email:null,firebaseUid:null,deviceId:null,active:true,archived:false,color:COLORS[EMPLOYEES.length%COLORS.length],ini:getInitials(name)};
+const newEmp={name,code,dept,title,phone,id:'emp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),email:null,authUid:null,deviceId:null,active:true,archived:false,color:COLORS[EMPLOYEES.length%COLORS.length],ini:getInitials(name)};
 EMPLOYEES.push(newEmp);saveEmployees();['newEmpName','newEmpCode','newEmpTitle','newEmpPhone'].forEach(id=>document.getElementById(id).value='');document.getElementById('newEmpDept').value='';renderEmpAdmin();btn.disabled=false;btnText.textContent='إضافة ✓';toast(MSG.empAdded,'success');
 }
 
