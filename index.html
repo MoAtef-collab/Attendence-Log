@@ -492,6 +492,10 @@ canvas{max-height:150px}
 <span class="ftag active" onclick="filterByTitle('',this)">الكل</span>
 <span class="ftag" onclick="filterByTitle('وكيل',this)">وكيل</span>
 <span class="ftag" onclick="filterByTitle('إشراف',this)">إشراف</span>
+<span class="ftag" onclick="filterByTitle('مديرة',this)">مديرة</span>
+<span class="ftag" onclick="filterByTitle('UPA',this)">UPA</span>
+<span class="ftag" onclick="filterByTitle('كلينيكال',this)">كلينيكال</span>
+<span class="ftag" onclick="filterByTitle('جودة',this)">جودة</span>
 </div>
 <div class="filter-tags" style="margin-top:.4rem" id="deptFilterTags">
 <span class="ftag active" onclick="filterByDept('',this)">كل الأقسام</span>
@@ -849,12 +853,12 @@ const DEFAULT_EMPLOYEES=[
 {name:'محمد اشرف محمود عبد المجيد',code:'2140',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد عبد التواب حسانين',code:'2513',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'ميرنا عماد زكي قزمان',code:'3316',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'اسماء عبدالرحمن حسنين علي',code:'3264',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'داليا عماد محمد كمال',code:'2376',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'اسماء عبدالرحمن حسنين علي',code:'',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'داليا عماد محمد كمال',code:'',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد ابراهيم حسنين',code:'2132',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'سارة الشحات عبده',code:'2485',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'محمد عاطف',code:'2953',dept:'',title:'',phone:''},
-{name:'محمد رفعت محمد',code:'2953',dept:'كلينيكال',title:'',phone:''},
+{name:'محمد رفعت محمد',code:'',dept:'كلينيكال',title:'',phone:''},
 ];
 
 function getInitials(n){const p=n.trim().split(' ');return p.length>=2?p[0][0]+'.'+p[1][0]:p[0].slice(0,2);}
@@ -1050,24 +1054,51 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
   },
 
   async setDeviceLock(emp, deviceId){
-    try{
-      const uid = emp.authUid || window.currentUser?.id;
-      if(!uid) return false;
-      const { error } = await supabase
-        .from('device_locks')
-        .upsert([{
-          uid: uid,
-          emp_id: emp.id,
-          emp_name: emp.name||'',
-          email: (emp.email||'').toLowerCase(),
-          authUid: uid,
-          device_id: deviceId,
-          active: true,
-          updated_at: new Date().toISOString()
-        }], { onConflict: 'uid' });
-      return !error;
-    }catch(e){ return false; }
-  },
+
+  try{
+
+    const uid = emp.authUid || window.currentUser?.id;
+
+    if(!uid){
+      console.error('DEVICE LOCK: Missing UID');
+      return false;
+    }
+
+    const payload = [{
+      uid: uid,
+      emp_id: emp.id,
+      emp_name: emp.name || '',
+      email: (emp.email || '').toLowerCase(),
+
+      // IMPORTANT
+      auth_uid: uid,
+
+      device_id: deviceId,
+      active: true,
+      updated_at: new Date().toISOString()
+    }];
+
+    console.log('DEVICE LOCK PAYLOAD:', payload);
+
+    const { data, error } = await supabase
+      .from('device_locks')
+      .upsert(payload, { onConflict: 'uid' })
+      .select();
+
+    console.log('DEVICE LOCK RESULT:', data);
+    console.log('DEVICE LOCK ERROR:', error);
+
+    if(error) throw error;
+
+    return true;
+
+  }catch(e){
+
+    console.error('SET DEVICE LOCK ERROR:', e);
+
+    return false;
+  }
+},
 
   async clearDeviceLock(uid){
     try{
@@ -1474,16 +1505,26 @@ async function validateEmployeeDevice(emp){
   const lock=await DB.getDeviceLock(uid);
 
   if(lock && lock.active!==false && lock.deviceId){
-    if(lock.deviceId!==devId){
-      return {ok:false,msg:MSG.deviceMismatch};
-    }
+    if(lock.deviceId !== devId){
+
+  console.warn('NEW DEVICE DETECTED');
+
+  toast('تم اكتشاف جهاز جديد','warning');
+
+  await DB.setDeviceLock(emp, devId);
+}
     return {ok:true,deviceId:devId};
   }
 
   if(emp.deviceId){
-    if(emp.deviceId!==devId){
-      return {ok:false,msg:MSG.deviceMismatch};
-    }
+    if(emp.deviceId !== devId){
+
+  console.warn('EMPLOYEE DEVICE CHANGED');
+
+  toast('تم تغيير الجهاز','warning');
+
+  await DB.setDeviceLock(emp, devId);
+}
     await DB.setDeviceLock(emp,devId);
     return {ok:true,deviceId:devId};
   }
