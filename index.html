@@ -221,6 +221,12 @@ canvas{max-height:150px}
 .emp-status .ess{font-size:.63rem;margin-top:1px}
 .s-present{color:var(--a1)}.s-absent{color:var(--red)}.s-late{color:var(--yellow)}.s-out{color:var(--muted)}.s-leave{color:var(--purple)}.s-perm{color:var(--a2)}
 .emp-actions{display:flex;gap:.3rem;margin-top:.3rem}
+.emp-device-warning{
+  font-size:.72rem;
+  color:#ffb020;
+  margin-top:.3rem;
+  font-weight:700;
+}
 .emp-act-btn{padding:2px 7px;border-radius:6px;font-family:'Cairo',sans-serif;font-size:.65rem;font-weight:700;cursor:pointer;border:none;transition:all .2s}
 .emp-act-wa{background:rgba(34,197,94,.15);color:var(--green)}
 .emp-act-copy{background:rgba(62,207,178,.15);color:var(--a1)}
@@ -488,15 +494,7 @@ canvas{max-height:150px}
 <label>إلى</label><input type="date" id="filterTo">
 <button class="filter-apply" onclick="applyDateFilter()">تطبيق</button>
 </div>
-<div class="filter-tags" id="titleFilterTags">
-<span class="ftag active" onclick="filterByTitle('',this)">الكل</span>
-<span class="ftag" onclick="filterByTitle('وكيل',this)">وكيل</span>
-<span class="ftag" onclick="filterByTitle('إشراف',this)">إشراف</span>
-<span class="ftag" onclick="filterByTitle('مديرة',this)">مديرة</span>
-<span class="ftag" onclick="filterByTitle('UPA',this)">UPA</span>
-<span class="ftag" onclick="filterByTitle('كلينيكال',this)">كلينيكال</span>
-<span class="ftag" onclick="filterByTitle('جودة',this)">جودة</span>
-</div>
+
 <div class="filter-tags" style="margin-top:.4rem" id="deptFilterTags">
 <span class="ftag active" onclick="filterByDept('',this)">كل الأقسام</span>
 <span class="ftag" onclick="filterByDept('صيدلية العمليات الكبرى',this)">العمليات الكبرى</span>
@@ -853,12 +851,12 @@ const DEFAULT_EMPLOYEES=[
 {name:'محمد اشرف محمود عبد المجيد',code:'2140',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد عبد التواب حسانين',code:'2513',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'ميرنا عماد زكي قزمان',code:'3316',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'اسماء عبدالرحمن حسنين علي',code:'',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
-{name:'داليا عماد محمد كمال',code:'',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'اسماء عبدالرحمن حسنين علي',code:'2151',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
+{name:'داليا عماد محمد كمال',code:'2364',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'احمد ابراهيم حسنين',code:'2132',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'سارة الشحات عبده',code:'2485',dept:'صيدلية نفقة الدولة الخارجي',title:'',phone:''},
 {name:'محمد عاطف',code:'2953',dept:'',title:'',phone:''},
-{name:'محمد رفعت محمد',code:'',dept:'كلينيكال',title:'',phone:''},
+{name:'محمد رفعت محمد',code:'3294',dept:'كلينيكال',title:'',phone:''},
 ];
 
 function getInitials(n){const p=n.trim().split(' ');return p.length>=2?p[0][0]+'.'+p[1][0]:p[0].slice(0,2);}
@@ -1053,6 +1051,26 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
     }catch(e){ return null; }
   },
 
+async getAllDeviceLocks(){
+
+  try{
+
+    const { data, error } = await supabase
+      .from('device_locks')
+      .select('*');
+
+    if(error) throw error;
+
+    return data || [];
+
+  }catch(e){
+
+    console.error('GET DEVICE LOCKS ERROR:', e);
+
+    return [];
+  }
+},
+
   async setDeviceLock(emp, deviceId){
 
   try{
@@ -1060,23 +1078,51 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
     const uid = emp.authUid || window.currentUser?.id;
 
     if(!uid){
-      console.error('DEVICE LOCK: Missing UID');
-      return false;
+      const { data: existing } = await supabase
+  .from('device_locks')
+  .select('*')
+  .eq('uid', uid)
+  .maybeSingle();
+
+console.log('EXISTING DEVICE LOCK:', existing);
     }
 
     const payload = [{
-      uid: uid,
-      emp_id: emp.id,
-      emp_name: emp.name || '',
-      email: (emp.email || '').toLowerCase(),
 
-      // IMPORTANT
-      auth_uid: uid,
+  uid: uid,
 
-      device_id: deviceId,
-      active: true,
-      updated_at: new Date().toISOString()
-    }];
+  emp_id: emp.id,
+
+  emp_name: emp.name || '',
+
+  email: (emp.email || '').toLowerCase(),
+
+  auth_uid: uid,
+
+  device_id: deviceId,
+
+  previous_device_id:
+    existing?.device_id && existing.device_id !== deviceId
+      ? existing.device_id
+      : existing?.previous_device_id || null,
+
+  device_changed_at:
+    existing?.device_id && existing.device_id !== deviceId
+      ? new Date().toISOString()
+      : existing?.device_changed_at || null,
+
+  warning_count:
+    existing?.device_id && existing.device_id !== deviceId
+      ? (existing.warning_count || 0) + 1
+      : existing?.warning_count || 0,
+
+  last_seen: new Date().toISOString(),
+
+  active: true,
+
+  updated_at: new Date().toISOString()
+
+}];
 
     console.log('DEVICE LOCK PAYLOAD:', payload);
 
@@ -1800,12 +1846,14 @@ function getDragDir(dx,dy){const d=Math.sqrt(dx*dx+dy*dy);if(d<DRAG_THRESHOLD)re
 // ===== MANAGER =====
 function initManager(){const today=new Date();const lbl=today.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const td=getTodayKey();document.getElementById('filterFrom').value=td;document.getElementById('filterTo').value=td;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
 
-function renderBoard(){
+async function renderBoard(){
 const targetDate=appState.filters.from||getTodayKey();
 const toDate=appState.filters.to||targetDate;
 const todayRecs=DB.records.filter(r=>r.dateKey>=targetDate&&r.dateKey<=toDate);
+const deviceLocks = await DB.getAllDeviceLocks();
 let present=0,late=0,onLeave=0,absent=0;const emps=getFilteredEmployees();
 const rows=emps.map(emp=>{
+const lock = deviceLocks.find(l => l.emp_id === emp.id);
 const latestDate=toDate;
 const empRecsForDate=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===latestDate);
 const ds=SHIFT.getDisplayStatus(empRecsForDate);
@@ -1822,7 +1870,17 @@ default:statusHtml='<div class="est s-absent">--</div><div class="ess s-absent">
 const rc=ds.status==='absent'?'alert':ds.status==='leave'?'on-leave':'';
 const wa=emp.phone?`<button class="emp-act-btn emp-act-wa" onclick="event.stopPropagation();openWhatsApp('${emp.phone}')">واتساب</button>`:'';
 const cp=emp.phone?`<button class="emp-act-btn emp-act-copy" onclick="event.stopPropagation();copyPhone('${emp.phone}')">نسخ</button>`:'';
-return`<div class="emp-row ${rc}" onclick="openDetail('${emp.id}')"><div class="emp-av" style="background:${emp.color}">${sanitize(emp.ini)}</div><div class="emp-info"><h5>${sanitize(emp.name)}</h5><p>${sanitize(emp.dept||emp.title||'')}</p><div class="emp-actions">${wa}${cp}</div></div><div class="emp-status">${statusHtml}</div><span class="emp-chevron">‹</span></div>`;
+const deviceWarn =
+  lock?.warning_count > 0
+    ? `<div class="emp-device-warning">
+         ⚠️ ${lock.warning_count} تغيير جهاز
+       </div>`
+    : '';
+return`<div class="emp-row ${rc}" onclick="openDetail('${emp.id}')"><div class="emp-av" style="background:${emp.color}">${sanitize(emp.ini)}</div><div class="emp-info"><h5>${sanitize(emp.name)}</h5><p>${sanitize(emp.dept||emp.title||'')}</p><div class="emp-actions">
+  ${wa}
+  ${cp}
+  ${deviceWarn}
+</div></div><div class="emp-status">${statusHtml}</div><span class="emp-chevron">‹</span></div>`;
 }).join('');
 document.getElementById('empList').innerHTML=rows||'<div style="color:var(--muted);text-align:center;padding:1rem">لا يوجد صيادلة</div>';
 document.getElementById('statPresent').textContent=present;document.getElementById('statAbsent').textContent=absent;document.getElementById('statLate').textContent=late;document.getElementById('statLeave').textContent=onLeave;
