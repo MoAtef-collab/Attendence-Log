@@ -1264,7 +1264,7 @@ async function doLogin(){
      const { data: mgrData, error: mgrError } = await supabase
   .from('managers')
   .select('*')
-  .eq('email', email)
+  .ilike('email', email)
   .maybeSingle();
 console.log('LOGIN EMAIL:', email);
 console.log('MANAGER DATA:', mgrData);
