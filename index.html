@@ -1078,14 +1078,17 @@ async getAllDeviceLocks(){
     const uid = emp.authUid || window.currentUser?.id;
 
     if(!uid){
-      const { data: existing } = await supabase
+  console.error('DEVICE LOCK: Missing UID');
+  return false;
+}
+
+const { data: existing } = await supabase
   .from('device_locks')
   .select('*')
   .eq('uid', uid)
   .maybeSingle();
 
 console.log('EXISTING DEVICE LOCK:', existing);
-    }
 
     const payload = [{
 
@@ -1263,7 +1266,9 @@ async function doLogin(){
   .select('*')
   .eq('email', email)
   .maybeSingle();
-
+console.log('LOGIN EMAIL:', email);
+console.log('MANAGER DATA:', mgrData);
+console.log('MANAGER ERROR:', mgrError);
 if (mgrError) {
   console.error('Manager lookup error:', mgrError);
   throw mgrError;
