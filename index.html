@@ -1058,7 +1058,9 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
 
     console.log('UPSERT RESULT:', data);
     console.log('UPSERT ERROR:', error);
-
+if(error){
+  console.error('SUPABASE UPSERT ERROR FULL:', error);
+}
     if(error) throw error;
 
     return data;
@@ -1583,8 +1585,14 @@ async function doFirstLogin(){
       EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
     ));
 
-    await DB.saveEmployeesToSupabase(
-      EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
+    await DB.saveEmployeesToSupabase([
+  {
+    ...emp,
+    email: email,
+    authUid: data.user.id,
+    deviceId: emp.deviceId
+  }
+]);
     );
 
     await DB.setDeviceLock(emp, emp.deviceId);
