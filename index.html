@@ -698,6 +698,70 @@ const COMPANY_LAT=30.1157,COMPANY_LNG=31.3022,GEO_RADIUS=650,GPS_ACC_LIMIT=150,W
 
 function getLocalDateKey(date){const d=date||new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 const getTodayKey=()=>getLocalDateKey(new Date());
+function getBusinessWeekStart(date = new Date()) {
+
+  const d = new Date(date);
+
+  d.setHours(0,0,0,0);
+
+  const day = d.getDay(); // 0=Sun ... 6=Sat
+
+  const diff = day === 6 ? 0 : day + 1;
+
+  d.setDate(d.getDate() - diff);
+
+  return d;
+}
+
+function getBusinessWeekEnd(date = new Date()) {
+
+  const start = getBusinessWeekStart(date);
+
+  const end = new Date(start);
+
+  end.setDate(start.getDate() + 6);
+
+  end.setHours(23,59,59,999);
+
+  return end;
+}
+
+function getBusinessWeekNumber(date = new Date()) {
+
+  const startOfYear = new Date(date.getFullYear(), 0, 1);
+
+  const firstWeekStart = getBusinessWeekStart(startOfYear);
+
+  const diff =
+    getBusinessWeekStart(date) - firstWeekStart;
+
+  return Math.floor(
+    diff / (7 * 24 * 60 * 60 * 1000)
+  ) + 1;
+}
+
+function getBusinessDayIndex(date = new Date()) {
+
+  const jsDay = date.getDay();
+
+  return jsDay === 6 ? 0 : jsDay + 1;
+}
+function getBusinessWeekLabel(date = new Date()) {
+
+  const start = getBusinessWeekStart(date);
+  const end = getBusinessWeekEnd(date);
+
+  const format = (d) =>
+  d.toLocaleDateString('ar-EG', {
+    day: 'numeric',
+    month: 'long'
+  });
+
+  return {
+    number: getBusinessWeekNumber(date),
+    range: `من ${format(start)} إلى ${format(end)}`
+  };
+}
 
 const MSG={
 enterIdentifier:'يرجى إدخال الكود أو البريد الإلكتروني',
@@ -1021,7 +1085,7 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
         title: e.title||'',
         phone: e.phone||'',
         email: e.email||null,
-        authUid: e.authUid||null,
+        authUid: e.auth_uid || null,
         deviceId: e.device_id||null,
         active: e.active!==false,
         archived: e.archived||false,
@@ -1849,7 +1913,19 @@ function onDragEnd(e){if(!dragState)return;document.removeEventListener('mousemo
 function getDragDir(dx,dy){const d=Math.sqrt(dx*dx+dy*dy);if(d<DRAG_THRESHOLD)return null;if(Math.abs(dy)>Math.abs(dx))return dy<0?'in':'out';return dx>0?'in':'out';}
 
 // ===== MANAGER =====
-function initManager(){const today=new Date();const lbl=today.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const td=getTodayKey();document.getElementById('filterFrom').value=td;document.getElementById('filterTo').value=td;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
+function initManager(){const today=new Date();const week = getBusinessWeekLabel(new Date());
+
+const lbl = `الأسبوع ${week.number} (${week.range})`;('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const weekStart = getBusinessWeekStart();
+const weekEnd = getBusinessWeekEnd();
+
+const from = weekStart.toISOString().split('T')[0];
+const to = weekEnd.toISOString().split('T')[0];
+
+document.getElementById('filterFrom').value = from;
+document.getElementById('filterTo').value = to;
+
+appState.filters.from = from;
+appState.filters.to = to;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
 
 async function renderBoard(){
 const targetDate=appState.filters.from||getTodayKey();
@@ -1919,7 +1995,9 @@ async function autoSync(){if(!DB.pending.length)return;const toSync=[...DB.pendi
 // ===== CHART =====
 Chart.defaults.color='#e2e8f5';Chart.defaults.font={family:'Cairo',size:10};
 function buildAttendChart(period){if(appState.attendChart)appState.attendChart.destroy();const{labels,data}=getChartData(period);const ctx=document.getElementById('attendChart').getContext('2d');appState.attendChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data,backgroundColor:data.map(v=>v>=80?'rgba(62,207,178,.6)':v>=60?'rgba(234,179,8,.6)':'rgba(239,68,68,.6)'),borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+'%'}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,.04)'},ticks:{callback:v=>v+'%'}}}}});}
-function getChartData(period){const DAY=86400000,now=Date.now(),labels=[],data=[],dn=['أحد','اثنين','ثلاثاء','أربعاء','خميس'],emps=getFilteredEmployees();if(period==='week'){for(let i=6;i>=0;i--){const d=new Date(now-i*DAY);if(d.getDay()===5||d.getDay()===6)continue;const dk=getLocalDateKey(d);const p=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;labels.push(dn[d.getDay()]||'');data.push(emps.length?Math.round(p/emps.length*100):0);}}else{for(let w=3;w>=0;w--){let tot=0,p=0;for(let d=0;d<7;d++){const day=new Date(now-(w*7+d)*DAY);if(day.getDay()===5||day.getDay()===6)continue;const dk=getLocalDateKey(day);tot+=emps.length;p+=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;}labels.push('أسبوع '+(4-w));data.push(tot?Math.round(p/tot*100):0);}}return{labels,data};}
+function getChartData(period){const DAY=86400000,now=Date.now(),labels=[],data=[],dn=['سبت','أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة'],emps=getFilteredEmployees();if(period==='week'){for(let i=6;i>=0;i--){const d=new Date(now-i*DAY);const dk=getLocalDateKey(d);const p=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;labels.push(
+  dn[getBusinessDayIndex(d)] || ''
+);data.push(emps.length?Math.round(p/emps.length*100):0);}}else{for(let w=3;w>=0;w--){let tot=0,p=0;for(let d=0;d<7;d++){const day=new Date(now-(w*7+d)*DAY);if(day.getDay()===5||day.getDay()===6)continue;const dk=getLocalDateKey(day);tot+=emps.length;p+=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;}labels.push('أسبوع '+(4-w));data.push(tot?Math.round(p/tot*100):0);}}return{labels,data};}
 function switchChartPeriod(period,el){appState.chartPeriod=period;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));el.classList.add('active');buildAttendChart(period);}
 
 // ===== EXPORT =====
@@ -1939,19 +2017,19 @@ const emp=appState.detailEmployee,now=Date.now(),DAY=86400000;const ms=new Date(
 const mr=DB.records.filter(r=>r.empId===emp.id&&new Date(r.time)>=ms),ir=mr.filter(r=>r.kind==='in'),or=mr.filter(r=>r.kind==='out');
 let tms=0;ir.forEach(rec=>{const mo=or.find(o=>o.dateKey===rec.dateKey&&(o.shiftNo||1)===(rec.shiftNo||1));if(mo)tms+=mo.time-rec.time;});
 document.getElementById('kpiHours').textContent=Math.round(tms/3600000);
-let wd=0,ab=0,lt=0;for(let i=0;i<30;i++){const d=new Date(now-i*DAY);if(d<ms)break;if(d.getDay()===5||d.getDay()===6)continue;wd++;const dk=getLocalDateKey(d);const di=DB.records.find(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='in');const hl=DB.records.some(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='leave');if(!di&&!hl)ab++;else if(di&&di.time>(new Date(d).setHours(WORK_HOUR,0,0,0)))lt++;}
+let wd=0,ab=0,lt=0;for(let i=0;i<30;i++){const d=new Date(now-i*DAY);if(d<ms)break;wd++;const dk=getLocalDateKey(d);const di=DB.records.find(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='in');const hl=DB.records.some(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='leave');if(!di&&!hl)ab++;else if(di&&di.time>(new Date(d).setHours(WORK_HOUR,0,0,0)))lt++;}
 document.getElementById('kpiAtt').textContent=wd?Math.round((wd-ab)/wd*100)+'%':'0%';document.getElementById('kpiAbs').textContent=ab;document.getElementById('kpiLate').textContent=lt;
 const abd=[0,0,0,0,0,0,0];for(let i=0;i<30;i++){const d=new Date(now-i*DAY);const dow=d.getDay();if(dow===5||dow===6)continue;const dk=getLocalDateKey(d);if(!DB.records.some(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='in'))abd[dow]++;}
-const mx=Math.max(...abd),wd2=abd.indexOf(mx);const dn2=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس'];document.getElementById('kpiWorstDay').textContent=mx>0?dn2[wd2]:'لا غياب 🎉';
+const mx=Math.max(...abd),wd2=abd.indexOf(mx);const dn2=['سبت','أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة'];document.getElementById('kpiWorstDay').textContent=mx>0?dn2[wd2]:'لا غياب 🎉';
 }
 
-function buildWeekBars(){const emp=appState.detailEmployee,now=Date.now(),DAY=86400000,dn=['أحد','اثنين','ثلاثاء','أربعاء','خميس'],cnt=[0,0,0,0,0],tot=[0,0,0,0,0];for(let i=0;i<28;i++){const d=new Date(now-i*DAY);const dow=d.getDay();if(dow===5||dow===6)continue;const mp=dow===0?0:dow-1;if(mp<0||mp>4)continue;tot[mp]++;const dk=getLocalDateKey(d);if(DB.records.some(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='in'))cnt[mp]++;}document.getElementById('weekBars').innerHTML=dn.map((day,i)=>{const pct=tot[i]?Math.round(cnt[i]/tot[i]*100):0;const col=pct>=80?'var(--a1)':pct>=60?'var(--yellow)':'var(--red)';return`<div class="wbar-wrap"><div class="wbar-bg"><div class="wbar-fill" style="height:${pct}%;background:${col}"></div></div><span class="wbar-label">${day}</span><span class="wbar-pct">${pct}%</span></div>`;}).join('');}
+function buildWeekBars(){const emp=appState.detailEmployee,now=Date.now(),DAY=86400000,dn=['سبت','أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة'],cnt=[0,0,0,0,0],tot=[0,0,0,0,0];for(let i=0;i<28;i++){const d=new Date(now-i*DAY);const dow=d.getDay();if(dow===5||dow===6)continue;const mp=dow===0?0:dow-1;if(mp<0||mp>4)continue;tot[mp]++;const dk=getLocalDateKey(d);if(DB.records.some(r=>r.empId===emp.id&&r.dateKey===dk&&r.kind==='in'))cnt[mp]++;}document.getElementById('weekBars').innerHTML=dn.map((day,i)=>{const pct=tot[i]?Math.round(cnt[i]/tot[i]*100):0;const col=pct>=80?'var(--a1)':pct>=60?'var(--yellow)':'var(--red)';return`<div class="wbar-wrap"><div class="wbar-bg"><div class="wbar-fill" style="height:${pct}%;background:${col}"></div></div><span class="wbar-label">${day}</span><span class="wbar-pct">${pct}%</span></div>`;}).join('');}
 
 function setHistFilter(f,el){appState.histFilter=f;document.querySelectorAll('.hftab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderHistLog();}
 
 function renderHistLog(){
 const emp=appState.detailEmployee,now=Date.now(),DAY=86400000,days=appState.histFilter==='week'?7:appState.histFilter==='month'?30:90,entries=[];
-for(let i=0;i<days;i++){const d=new Date(now-i*DAY);if(d.getDay()===5||d.getDay()===6)continue;const dk=getLocalDateKey(d);const dr=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===dk);const ds=SHIFT.getDisplayStatus(dr);entries.push({d,dk,ds,dr});}
+for(let i=0;i<days;i++){const d=new Date(now-i*DAY);const dk=getLocalDateKey(d);const dr=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===dk);const ds=SHIFT.getDisplayStatus(dr);entries.push({d,dk,ds,dr});}
 const c=document.getElementById('histLog');if(!entries.length){c.innerHTML=`<div style="color:var(--muted);text-align:center;padding:1rem">${MSG.noRecords}</div>`;return;}
 c.innerHTML=entries.map(info=>{
 const dl=info.d.toLocaleDateString('ar-EG',{weekday:'long',month:'short',day:'numeric'});const ds=info.ds;let badge,detail;
