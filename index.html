@@ -529,6 +529,14 @@ canvas{max-height:150px}
 <button class="exp-btn" onclick="exportData('range','pdf')">📄 الفترة — PDF</button>
 </div>
 </div>
+<div class="board-head">
+  <h3 id="boardDateLabel"></h3>
+</div>
+
+<button onclick="repairEmployeesTable()">
+إصلاح الموظفين
+</button>
+
 <div class="emp-list-card">
 <div class="sec-label" style="margin-bottom:.7rem">👥 الصيادلة — <span id="boardDateLabel"></span></div>
 <div id="empList"></div>
@@ -1914,6 +1922,63 @@ function getDragDir(dx,dy){const d=Math.sqrt(dx*dx+dy*dy);if(d<DRAG_THRESHOLD)re
 
 // ===== MANAGER =====
 function initManager(){const today=new Date();const week = getBusinessWeekLabel(new Date());
+
+async function repairEmployeesTable(){
+
+  try{
+
+    const clean = EMPLOYEES.map((e,i)=>({
+
+      id: e.id || ('emp_'+i),
+
+      name: e.name || '',
+
+      code: e.code || '',
+
+      dept: e.dept || '',
+
+      title: e.title || '',
+
+      phone: e.phone || '',
+
+      email: e.email || null,
+
+      auth_uid: e.authUid || null,
+
+      device_id: e.deviceId || null,
+
+      active: e.active !== false,
+
+      archived: e.archived || false,
+
+      color: e.color || '',
+
+      ini: e.ini || ''
+
+    }));
+
+    console.log('REPAIR PAYLOAD:', clean);
+
+    const { data, error } = await supabase
+      .from('employees')
+      .upsert(clean, { onConflict:'id' })
+      .select();
+
+    console.log('REPAIR RESULT:', data);
+    console.log('REPAIR ERROR:', error);
+
+    if(error) throw error;
+
+    toast('تم إصلاح جدول الموظفين', 'success');
+
+  }catch(e){
+
+    console.error('REPAIR FAILED:', e);
+
+    toast('فشل إصلاح الموظفين', 'error');
+
+  }
+}
 
 const lbl = `الأسبوع ${week.number} (${week.range})`;('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const weekStart = getBusinessWeekStart();
 const weekEnd = getBusinessWeekEnd();
