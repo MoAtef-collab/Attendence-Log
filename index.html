@@ -1923,6 +1923,18 @@ function getDragDir(dx,dy){const d=Math.sqrt(dx*dx+dy*dy);if(d<DRAG_THRESHOLD)re
 // ===== MANAGER =====
 function initManager(){const today=new Date();const week = getBusinessWeekLabel(new Date());
 
+const lbl = `الأسبوع ${week.number} (${week.range})`;('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const weekStart = getBusinessWeekStart();
+const weekEnd = getBusinessWeekEnd();
+
+const from = weekStart.toISOString().split('T')[0];
+const to = weekEnd.toISOString().split('T')[0];
+
+document.getElementById('filterFrom').value = from;
+document.getElementById('filterTo').value = to;
+
+appState.filters.from = from;
+appState.filters.to = to;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
+
 async function repairEmployeesTable(){
 
   try{
@@ -1979,18 +1991,6 @@ async function repairEmployeesTable(){
 
   }
 }
-
-const lbl = `الأسبوع ${week.number} (${week.range})`;('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const weekStart = getBusinessWeekStart();
-const weekEnd = getBusinessWeekEnd();
-
-const from = weekStart.toISOString().split('T')[0];
-const to = weekEnd.toISOString().split('T')[0];
-
-document.getElementById('filterFrom').value = from;
-document.getElementById('filterTo').value = to;
-
-appState.filters.from = from;
-appState.filters.to = to;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
 
 async function renderBoard(){
 const targetDate=appState.filters.from||getTodayKey();
