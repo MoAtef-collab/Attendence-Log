@@ -1921,20 +1921,31 @@ function onDragEnd(e){if(!dragState)return;document.removeEventListener('mousemo
 function getDragDir(dx,dy){const d=Math.sqrt(dx*dx+dy*dy);if(d<DRAG_THRESHOLD)return null;if(Math.abs(dy)>Math.abs(dx))return dy<0?'in':'out';return dx>0?'in':'out';}
 
 // ===== MANAGER =====
-function initManager(){const today=new Date();const week = getBusinessWeekLabel(new Date());
+function initManager(){
 
-const lbl = `الأسبوع ${week.number} (${week.range})`;('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});document.getElementById('mgrDateLabel').textContent=lbl;document.getElementById('boardDateLabel').textContent=lbl;const weekStart = getBusinessWeekStart();
-const weekEnd = getBusinessWeekEnd();
+  const week = getBusinessWeekLabel(new Date());
 
-const from = weekStart.toISOString().split('T')[0];
-const to = weekEnd.toISOString().split('T')[0];
+  const lbl = `الأسبوع ${week.number} (${week.range})`;
 
-document.getElementById('filterFrom').value = from;
-document.getElementById('filterTo').value = to;
+  document.getElementById('mgrDateLabel').textContent = lbl;
+  document.getElementById('boardDateLabel').textContent = lbl;
 
-appState.filters.from = from;
-appState.filters.to = to;appState.filters.from=td;appState.filters.to=td;renderBoard();buildAttendChart('week');}
+  const weekStart = getBusinessWeekStart();
+  const weekEnd = getBusinessWeekEnd();
 
+  const from = getLocalDateKey(weekStart);
+  const to = getLocalDateKey(weekEnd);
+
+  document.getElementById('filterFrom').value = from;
+  document.getElementById('filterTo').value = to;
+
+  appState.filters.from = from;
+  appState.filters.to = to;
+
+  renderBoard();
+
+  buildAttendChart('week');
+}
 async function repairEmployeesTable(){
 
   try{
