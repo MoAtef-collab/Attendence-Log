@@ -537,6 +537,10 @@ canvas{max-height:150px}
 إصلاح الموظفين
 </button>
 
+<button onclick="migrateLegacyEmployees()">
+  Migrate Legacy Employees
+</button>
+
 <div class="emp-list-card">
 <div class="sec-label" style="margin-bottom:.7rem">👥 الصيادلة — <span id="boardDateLabel"></span></div>
 <div id="empList"></div>
@@ -950,6 +954,71 @@ function saveEmployees(){
     DB.saveEmployeesToSupabase(clean);
   }
 }
+
+async function migrateLegacyEmployees(){
+
+  try{
+
+    const saved = localStorage.getItem('attendly_emps');
+
+    let legacyEmployees = [];
+
+    if(saved){
+      legacyEmployees = JSON.parse(saved);
+    }else{
+      legacyEmployees = DEFAULT_EMPLOYEES;
+    }
+
+    const cleaned = legacyEmployees.map((e,i)=>({
+
+      id: e.id || ('emp_'+i),
+
+      name: e.name || '',
+
+      email: e.email || null,
+
+      auth_uid: e.authUid || e.auth_uid || null,
+
+      active: e.active !== false,
+
+      archived: e.archived || false,
+
+      department: e.department || '',
+
+      title: e.title || '',
+
+      color: e.color || '',
+
+      device_id: e.deviceId || null
+
+    }));
+
+
+    console.log('MIGRATING:', cleaned);
+
+    const {data,error} = await supabase
+      .from('employees')
+      .upsert(cleaned);
+
+    if(error){
+      console.error('MIGRATION FAILED:', error);
+      alert('Migration failed');
+      return;
+    }
+
+    console.log('MIGRATION SUCCESS:', data);
+
+    alert('Employees migrated successfully');
+
+  }catch(err){
+
+    console.error(err);
+    alert('Migration crashed');
+
+  }
+
+}
+window.migrateLegacyEmployees = migrateLegacyEmployees;
 
 function findEmployeeByIdentifier(id){
 const t=id.trim(),tl=t.toLowerCase();
