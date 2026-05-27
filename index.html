@@ -963,7 +963,6 @@ async function migrateLegacyEmployees(){
       legacyEmployees = JSON.parse(saved);
     }
     
-    // If local storage is empty or not an array, fall back to default list
     if(!Array.isArray(legacyEmployees) || legacyEmployees.length === 0){
       legacyEmployees = DEFAULT_EMPLOYEES;
     }
@@ -971,27 +970,21 @@ async function migrateLegacyEmployees(){
     const cleaned = legacyEmployees.map((e,i)=>({
       id: e.id || ('emp_' + i + '_' + (e.name || '').replace(/\s/g, '_')),
       name: e.name || '',
-      code: e.code || '',          // Added missing field
+      code: e.code || '',          
       dept: e.dept || '',
       title: e.title || '',
-      phone: e.phone || '',        // Added missing field
+      phone: e.phone || '',        
       email: e.email || null,
       auth_uid: e.authUid || e.auth_uid || null,
       device_id: e.deviceId || e.device_id || null,
       active: e.active !== false,
       archived: e.archived || false,
       color: e.color || '',
-      ini: e.ini || getInitials(e.name || '') // Added missing field
+      ini: e.ini || getInitials(e.name || '') 
     }));
 
     console.log('MIGRATING PAYLOAD:', cleaned);
-    
-    if (cleaned.length === 0) {
-      alert('No employees found to migrate.');
-      return;
-    }
 
-    // Notice the addition of .select() to verify the returned rows
     const { data, error } = await supabase
       .from('employees')
       .upsert(cleaned)
@@ -1003,8 +996,13 @@ async function migrateLegacyEmployees(){
       return;
     }
     
-    console.log('MIGRATION SUCCESS:', data);
-    alert(`Successfully migrated ${cleaned.length} employees.`);
+    console.log('DATABASE RESPONSE:', data);
+
+    if (!data || data.length === 0) {
+      alert('Warning: The database accepted 0 rows. This means your Supabase project is connected, but Row-Level Security (RLS) blocked the write operation. Check your table policies.');
+    } else {
+      alert(`Successfully wrote ${data.length} employees to the database.`);
+    }
   }catch(err){
     console.error(err);
     alert('Migration crashed: ' + err.message);
