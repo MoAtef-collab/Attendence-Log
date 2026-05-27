@@ -956,67 +956,59 @@ function saveEmployees(){
 }
 
 async function migrateLegacyEmployees(){
-
   try{
-
     const saved = localStorage.getItem('attendly_emps');
-
     let legacyEmployees = [];
-
     if(saved){
       legacyEmployees = JSON.parse(saved);
-    }else{
+    }
+    
+    // If local storage is empty or not an array, fall back to default list
+    if(!Array.isArray(legacyEmployees) || legacyEmployees.length === 0){
       legacyEmployees = DEFAULT_EMPLOYEES;
     }
 
     const cleaned = legacyEmployees.map((e,i)=>({
-
-      id: e.id || ('emp_'+i),
-
+      id: e.id || ('emp_' + i + '_' + (e.name || '').replace(/\s/g, '_')),
       name: e.name || '',
-
-      email: e.email || null,
-
-      auth_uid: e.authUid || e.auth_uid || null,
-
-      active: e.active !== false,
-
-      archived: e.archived || false,
-
-       dept: e.dept || '',
-
+      code: e.code || '',          // Added missing field
+      dept: e.dept || '',
       title: e.title || '',
-
+      phone: e.phone || '',        // Added missing field
+      email: e.email || null,
+      auth_uid: e.authUid || e.auth_uid || null,
+      device_id: e.deviceId || e.device_id || null,
+      active: e.active !== false,
+      archived: e.archived || false,
       color: e.color || '',
-
-      device_id: e.deviceId || null
-
+      ini: e.ini || getInitials(e.name || '') // Added missing field
     }));
 
-
-    console.log('MIGRATING:', cleaned);
-
-    const {data,error} = await supabase
-      .from('employees')
-      .upsert(cleaned);
-
-    if(error){
-      console.error('MIGRATION FAILED:', error);
-      alert('Migration failed');
+    console.log('MIGRATING PAYLOAD:', cleaned);
+    
+    if (cleaned.length === 0) {
+      alert('No employees found to migrate.');
       return;
     }
 
+    // Notice the addition of .select() to verify the returned rows
+    const { data, error } = await supabase
+      .from('employees')
+      .upsert(cleaned)
+      .select();
+      
+    if(error){
+      console.error('MIGRATION FAILED:', error);
+      alert('Migration failed: ' + error.message);
+      return;
+    }
+    
     console.log('MIGRATION SUCCESS:', data);
-
-    alert('Employees migrated successfully');
-
+    alert(`Successfully migrated ${cleaned.length} employees.`);
   }catch(err){
-
     console.error(err);
-    alert('Migration crashed');
-
+    alert('Migration crashed: ' + err.message);
   }
-
 }
 window.migrateLegacyEmployees = migrateLegacyEmployees;
 
