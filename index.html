@@ -937,12 +937,105 @@ const DEFAULT_EMPLOYEES=[
 
 function getInitials(n){const p=n.trim().split(' ');return p.length>=2?p[0][0]+'.'+p[1][0]:p[0].slice(0,2);}
 
-function initEmployees(){
-const saved=localStorage.getItem('attendly_emps');
-if(saved){try{const parsed=JSON.parse(saved);return parsed.map(e=>{delete e.pass;return e;});}catch(e){}}
-return DEFAULT_EMPLOYEES.map((e,i)=>({...e,id:e.id||('emp_'+i+'_'+e.name.replace(/\s/g,'_')),email:null,deviceId:null,active:true,archived:false,color:COLORS[i%COLORS.length],ini:getInitials(e.name)}));
+async function initEmployees(){
+
+  try{
+
+    console.log(
+      'LOADING EMPLOYEES FROM SUPABASE...'
+    );
+
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*');
+
+    if(error){
+
+      console.error(
+        'SUPABASE LOAD FAILED:',
+        error
+      );
+
+      throw error;
+    }
+
+    if(data && data.length){
+
+      console.log(
+        'EMPLOYEES LOADED FROM SUPABASE:',
+        data.length
+      );
+
+      // refresh local cache
+      localStorage.setItem(
+        'attendly_emps',
+        JSON.stringify(data)
+      );
+
+      return data.map(e=>({
+
+        ...e,
+
+        authUid:
+          e.auth_uid || null,
+
+        deviceId:
+          e.device_id || null
+
+      }));
+
+    }
+
+    console.warn(
+      'SUPABASE EMPTY, TRYING CACHE'
+    );
+
+    throw new Error('No employees');
+
+  }catch(err){
+
+    console.warn(
+      'FALLING BACK TO LOCAL CACHE'
+    );
+
+    const saved = localStorage.getItem(
+      'attendly_emps'
+    );
+
+    if(saved){
+
+      try{
+
+        const parsed = JSON.parse(saved);
+
+        console.log(
+          'CACHE LOADED:',
+          parsed.length
+        );
+
+        return parsed;
+
+      }catch(e){
+
+        console.error(
+          'CACHE PARSE FAILED:',
+          e
+        );
+
+      }
+
+    }
+
+    console.warn(
+      'NO CACHE FOUND'
+    );
+
+    return [];
+
+  }
+
 }
-let EMPLOYEES=initEmployees();
+let EMPLOYEES = await initEmployees();
 function saveEmployees(){
   const clean=EMPLOYEES.map(e=>{
     const c={...e};
@@ -1135,6 +1228,78 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
     console.error('SAVE EMPLOYEES ERROR:', e);
 
   }
+},
+
+async saveSingleEmployeeToSupabase(emp) {
+
+  try {
+
+    const row = {
+
+      id: emp.id,
+      name: emp.name,
+
+      code: emp.code || '',
+      dept: emp.dept || '',
+      title: emp.title || '',
+      phone: emp.phone || '',
+
+      // Preserve DB values if undefined
+      // Allow explicit null resets
+
+      email:
+        emp.email === undefined
+          ? undefined
+          : emp.email,
+
+      auth_uid:
+        emp.authUid === undefined
+          ? undefined
+          : emp.authUid,
+
+      device_id:
+        emp.deviceId === undefined
+          ? undefined
+          : emp.deviceId,
+
+      active: emp.active !== false,
+      archived: emp.archived || false,
+
+      color: emp.color || '',
+      ini: emp.ini || ''
+
+    };
+
+    // REMOVE undefined keys completely
+    const cleanRow = Object.fromEntries(
+      Object.entries(row)
+        .filter(([_,v]) => v !== undefined)
+    );
+
+    console.log(
+      'UPDATING SINGLE EMPLOYEE ROW:',
+      cleanRow
+    );
+
+    const { data, error } = await supabase
+      .from('employees')
+      .upsert([cleanRow])
+      .select();
+
+    if(error) throw error;
+
+    return data;
+
+  } catch(e) {
+
+    console.error(
+      'SAVE SINGLE EMPLOYEE ERROR:',
+      e
+    );
+
+    return null;
+  }
+
 },
 
   async loadEmployeesFromSupabase(){
@@ -1484,10 +1649,10 @@ if (!mgrData) {
         if(!emp.email){ emp.email=email; needsUpdate=true; }
         if(!emp.authUid && data.user){ emp.authUid=data.user.id; needsUpdate=true; }
         if(needsUpdate){
-          await DB.saveEmployeesToSupabase(
-            EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
-          );
-        }
+
+  await DB.saveSingleEmployeeToSupabase(emp);
+
+}
       }
 
       if(!emp){
@@ -1568,17 +1733,16 @@ if (!mgrData) {
     }
 
     if(!emp.deviceId){
-      emp.deviceId=devCheck.deviceId;
-      await DB.saveEmployeesToSupabase(
-        EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
-      );
-    }
+
+  emp.deviceId = devCheck.deviceId;
+
+  await DB.saveSingleEmployeeToSupabase(emp);
+
+}
 
     if(window.currentUser && !emp.authUid){
       emp.authUid=window.currentUser.id;
-      await DB.saveEmployeesToSupabase(
-        EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
-      );
+      await DB.saveSingleEmployeeToSupabase(emp);
     }
 
     appState.currentUser={...emp,role:'emp'};
@@ -1650,9 +1814,7 @@ async function doFirstLogin(){
       EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
     ));
 
-    await DB.saveEmployeesToSupabase(
-      EMPLOYEES.map(e=>{ const c={...e}; delete c.pass; return c; })
-    );
+    await DB.saveSingleEmployeeToSupabase(emp);
 
     await DB.setDeviceLock(emp, emp.deviceId);
 
@@ -1930,13 +2092,69 @@ DB.save();renderDayLog();updateStatusBanner();updateActionButtons();
 }
 
 async function submitLeaveConfirmed(){
-const{sub,from,to,shiftNo,dayType}=appState.pendingRecord;appState.pendingRecord=null;
-const emp=appState.currentUser,DAY=86400000;let d=new Date(from);const end=new Date(to);let count=0;
-while(d<=end){const dow=d.getDay();if(dow!==5&&dow!==6){const dateKey=getLocalDateKey(d);const dayRecs=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===dateKey);const lc=SHIFT.canLeave(dayRecs);
-if(lc.ok){const rec={id:crypto.randomUUID(),empId:emp.id,empName:emp.name,kind:'leave',sub,shiftNo:lc.shiftNo||shiftNo||1,dayType:dayType||SHIFT.getDayType(dayRecs),endType:'',time:d.getTime(),dateKey,offline:!appState.isOnline,uid:window.currentUser?.id||''};
-DB.records.push(rec);if(appState.isOnline){const fbId=await DB.pushRecord(rec);if(fbId){const idx=DB.records.findIndex(r=>r.id===rec.id);if(idx>-1)DB.records[idx].fbId=fbId;}}else{DB.pending.push(rec);}count++;}}
-d=new Date(d.getTime()+DAY);}
-DB.save();renderDayLog();updateStatusBanner();updateActionButtons();toast(`✓ تم تسجيل ${count} يوم إجازة (${sub})`,'success');
+  const {sub,from,to,shiftNo,dayType}=appState.pendingRecord;
+  appState.pendingRecord=null;
+
+  const emp=appState.currentUser,
+        DAY=86400000;
+
+  let d=new Date(from);
+  const end=new Date(to);
+  let count=0;
+
+  while(d<=end){
+
+    const dateKey=getLocalDateKey(d);
+
+    const dayRecs=DB.records.filter(
+      r=>r.empId===emp.id && r.dateKey===dateKey
+    );
+
+    const lc=SHIFT.canLeave(dayRecs);
+
+    if(lc.ok){
+
+      const rec={
+        id:crypto.randomUUID(),
+        empId:emp.id,
+        empName:emp.name,
+        kind:'leave',
+        sub,
+        shiftNo:lc.shiftNo||shiftNo||1,
+        dayType:dayType||SHIFT.getDayType(dayRecs),
+        endType:'',
+        time:d.getTime(),
+        dateKey,
+        offline:!appState.isOnline,
+        uid:window.currentUser?.id||''
+      };
+
+      DB.records.push(rec);
+
+      if(appState.isOnline){
+        const fbId=await DB.pushRecord(rec);
+
+        if(fbId){
+          const idx=DB.records.findIndex(r=>r.id===rec.id);
+          if(idx>-1) DB.records[idx].fbId=fbId;
+        }
+      }else{
+        DB.pending.push(rec);
+      }
+
+      count++;
+    }
+
+    // يجب أن تكون داخل while
+    d=new Date(d.getTime()+DAY);
+  }
+
+  DB.save();
+  renderDayLog();
+  updateStatusBanner();
+  updateActionButtons();
+
+  toast(`✓ تم تسجيل ${count} يوم إجازة (${sub})`,'success');
 }
 
 function cancelRecord(recId){
@@ -2136,7 +2354,7 @@ Chart.defaults.color='#e2e8f5';Chart.defaults.font={family:'Cairo',size:10};
 function buildAttendChart(period){if(appState.attendChart)appState.attendChart.destroy();const{labels,data}=getChartData(period);const ctx=document.getElementById('attendChart').getContext('2d');appState.attendChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data,backgroundColor:data.map(v=>v>=80?'rgba(62,207,178,.6)':v>=60?'rgba(234,179,8,.6)':'rgba(239,68,68,.6)'),borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+'%'}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'}},y:{min:0,max:100,grid:{color:'rgba(255,255,255,.04)'},ticks:{callback:v=>v+'%'}}}}});}
 function getChartData(period){const DAY=86400000,now=Date.now(),labels=[],data=[],dn=['سبت','أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة'],emps=getFilteredEmployees();if(period==='week'){for(let i=6;i>=0;i--){const d=new Date(now-i*DAY);const dk=getLocalDateKey(d);const p=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;labels.push(
   dn[getBusinessDayIndex(d)] || ''
-);data.push(emps.length?Math.round(p/emps.length*100):0);}}else{for(let w=3;w>=0;w--){let tot=0,p=0;for(let d=0;d<7;d++){const day=new Date(now-(w*7+d)*DAY);if(day.getDay()===5||day.getDay()===6)continue;const dk=getLocalDateKey(day);tot+=emps.length;p+=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;}labels.push('أسبوع '+(4-w));data.push(tot?Math.round(p/tot*100):0);}}return{labels,data};}
+);data.push(emps.length?Math.round(p/emps.length*100):0);}}else{for(let w=3;w>=0;w--){let tot=0,p=0;for(let d=0;d<7;d++){const day=new Date(now-(w*7+d)*DAY);const dk=getLocalDateKey(day);tot+=emps.length;p+=new Set(DB.records.filter(r=>r.dateKey===dk&&r.kind==='in'&&emps.find(e=>e.id===r.empId)).map(r=>r.empId)).size;}labels.push('أسبوع '+(4-w));data.push(tot?Math.round(p/tot*100):0);}}return{labels,data};}
 function switchChartPeriod(period,el){appState.chartPeriod=period;document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('active'));el.classList.add('active');buildAttendChart(period);}
 
 // ===== EXPORT =====
@@ -2193,7 +2411,12 @@ async function adminResetPass(i){
   emp.authUid=null;
   emp.deviceId=null;
   emp.email=null;
-  saveEmployees();
+  localStorage.setItem(
+  'attendly_emps',
+  JSON.stringify(EMPLOYEES)
+);
+
+await DB.saveSingleEmployeeToSupabase(emp);
   if(uid){ await DB.clearDeviceLock(uid); }
   renderEmpAdmin();
   toast('✓ تم إعادة تعيين الحساب — يحتاج كود + 0000','success');
@@ -2202,21 +2425,40 @@ async function adminResetDevice(i){
   const emp=EMPLOYEES[i];
   const uid=emp.authUid||null;
   emp.deviceId=null;
-  saveEmployees();
+  localStorage.setItem(
+  'attendly_emps',
+  JSON.stringify(EMPLOYEES)
+);
+
+await DB.saveSingleEmployeeToSupabase(emp);
   if(uid){
     await DB.clearDeviceLock(uid);
   }
   renderEmpAdmin();
   toast('✓ تم إعادة تعيين الجهاز','success');
 }
-function adminToggleActive(i){EMPLOYEES[i].active=EMPLOYEES[i].active===false?true:false;saveEmployees();renderEmpAdmin();toast(EMPLOYEES[i].active?'✓ تم تفعيل الصيدلي':'✓ تم تعطيل الصيدلي','success');}
+async function adminToggleActive(i){EMPLOYEES[i].active=EMPLOYEES[i].active===false?true:false;localStorage.setItem(
+  'attendly_emps',
+  JSON.stringify(EMPLOYEES)
+);
+
+await DB.saveSingleEmployeeToSupabase(
+  EMPLOYEES[i]
+);renderEmpAdmin();toast(EMPLOYEES[i].active?'✓ تم تفعيل الصيدلي':'✓ تم تعطيل الصيدلي','success');}
 
 async function addEmployee(){
 const name=document.getElementById('newEmpName').value.trim(),code=document.getElementById('newEmpCode').value.trim(),dept=document.getElementById('newEmpDept').value,title=document.getElementById('newEmpTitle').value.trim(),phone=document.getElementById('newEmpPhone').value.trim();
 if(!name){toast(MSG.enterName,'warning');return;}
 const btn=document.getElementById('addEmpBtn'),btnText=document.getElementById('addEmpBtnText');btnText.innerHTML='<span class="loading-spinner"></span>';btn.disabled=true;
 const newEmp={name,code,dept,title,phone,id:'emp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),email:null,authUid:null,deviceId:null,active:true,archived:false,color:COLORS[EMPLOYEES.length%COLORS.length],ini:getInitials(name)};
-EMPLOYEES.push(newEmp);saveEmployees();['newEmpName','newEmpCode','newEmpTitle','newEmpPhone'].forEach(id=>document.getElementById(id).value='');document.getElementById('newEmpDept').value='';renderEmpAdmin();btn.disabled=false;btnText.textContent='إضافة ✓';toast(MSG.empAdded,'success');
+EMPLOYEES.push(newEmp);
+
+localStorage.setItem(
+  'attendly_emps',
+  JSON.stringify(EMPLOYEES)
+);
+
+await DB.saveSingleEmployeeToSupabase(newEmp);['newEmpName','newEmpCode','newEmpTitle','newEmpPhone'].forEach(id=>document.getElementById(id).value='');document.getElementById('newEmpDept').value='';renderEmpAdmin();btn.disabled=false;btnText.textContent='إضافة ✓';toast(MSG.empAdded,'success');
 }
 
 function renderRecSel(){document.getElementById('recEmpSelect').innerHTML='<option value="">-- اختر --</option>'+EMPLOYEES.map(e=>`<option value="${e.id}">${sanitize(e.name)}</option>`).join('');}
