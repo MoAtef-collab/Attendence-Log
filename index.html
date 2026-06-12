@@ -20,8 +20,26 @@ window.SB = supabase;
 window.supabase = supabase;
 
 supabase.auth.onAuthStateChange((event, session) => {
+
+  console.log('AUTH EVENT:', event);
+
   window.currentUser = session?.user || null;
-  window.dispatchEvent(new CustomEvent('authStateChanged', { detail: session?.user }));
+
+  window.dispatchEvent(
+    new CustomEvent('authStateChanged', {
+      detail: session?.user
+    })
+  );
+
+  if(event === 'PASSWORD_RECOVERY'){
+
+    document.getElementById('changePassEmail').value =
+      session?.user?.email || '';
+
+    goTo('pgChangePass');
+
+  }
+
 });
 
 window.sbReady = true;
@@ -1942,11 +1960,6 @@ async function doChangePass() {
   btn.disabled = true;
 
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-
-    if (!sessionData.session) {
-      throw new Error('No active session');
-    }
 
     const { error } = await supabase.auth.updateUser({
       password: newP
