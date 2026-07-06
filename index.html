@@ -41,6 +41,9 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 
 });
+supabase.auth.getSession().then(({data})=>{
+ console.log("CURRENT SESSION:", data.session);
+});
 
 window.sbReady = true;
 window.dispatchEvent(new Event('sbReady'));
@@ -1173,11 +1176,17 @@ return EMPLOYEES.find(e=>e.name===t&&e.active!==false&&!e.archived);
   async pullRecords(){
     try{
       const since = Date.now() - (30 * 86400000);
-      const { data, error } = await supabase
-        .from('attendance')
-        .select('*')
-        .gte('time', since);
-      if(error || !data) return;
+const { data, error } = await supabase
+  .from('attendance')
+  .select('*')
+  .gte('time', since);
+
+console.log("=== pullRecords ===");
+console.log("window.currentUser:", window.currentUser);
+console.log("error:", error);
+console.log("rows:", data);
+
+if (error || !data) return;
       data.forEach(fr => {
         const rec = {
           id: fr.id,
