@@ -2314,9 +2314,11 @@ const deviceLocks = await DB.getAllDeviceLocks();
 let present=0,late=0,onLeave=0,absent=0;const emps=getFilteredEmployees();
 const rows=emps.map(emp=>{
 const lock = deviceLocks.find(l => l.emp_id === emp.id);
-const latestDate=toDate;
-const empRecsForDate=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===latestDate);
-const ds=SHIFT.getDisplayStatus(empRecsForDate);
+const latestDate = getTodayKey();
+const empRecsForDate = DB.records.filter(
+  r => r.empId === emp.id && r.dateKey === latestDate
+);
+const ds = SHIFT.getDisplayStatus(empRecsForDate);
 switch(ds.status){case'leave':onLeave++;break;case'present':present++;break;case'late':present++;late++;break;case'out':case'permission_out':present++;break;default:absent++;}
 const t=ds.time?new Date(ds.time).toLocaleTimeString('ar-EG',{hour12:false}):'--';let statusHtml;
 switch(ds.status){
