@@ -502,6 +502,7 @@ canvas{max-height:150px}
 </div>
 <div class="scroll">
 <div class="mgr-body">
+<div class="stats-row-label" id="statsRangeLabel" style="font-size:.68rem;color:var(--muted);margin-bottom:.4rem;text-align:center"></div>
 <div class="stats-row">
 <div class="stat-card"><div class="stat-tooltip">سجّل حضور</div><div class="stat-num green" id="statPresent">0</div><div class="stat-label">حاضر</div></div>
 <div class="stat-card"><div class="stat-tooltip">لا حضور ولا إجازة</div><div class="stat-num red" id="statAbsent">0</div><div class="stat-label">غائب</div></div>
@@ -563,7 +564,7 @@ canvas{max-height:150px}
 </button>
 
 <div class="emp-list-card">
-<div class="sec-label" style="margin-bottom:.7rem">👥 الصيادلة — <span id="boardDateLabel"></span></div>
+<div class="sec-label" id="empListStatusLabel" style="margin-bottom:.7rem">👤 الصيادلة</div>
 <div id="empList"></div>
 </div>
 </div>
@@ -727,10 +728,15 @@ canvas{max-height:150px}
 <div class="toast" id="toast"></div>
 
 <script type="module">
-const COMPANY_LAT=30.1157,COMPANY_LNG=31.3022,GEO_RADIUS=650,GPS_ACC_LIMIT=150,WORK_HOUR=9,CANCEL_MINS=5,DEFAULT_PASS='0000';
+const COMPANY_LAT=30.1157,COMPANY_LNG=31.3022,GEO_RADIUS=650,GPS_ACC_LIMIT=250,WORK_HOUR=6,CANCEL_MINS=5,DEFAULT_PASS='0000';
 
 function getLocalDateKey(date){const d=date||new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 const getTodayKey=()=>getLocalDateKey(new Date());
+function parseDateLocal(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+
 function getBusinessWeekStart(date = new Date()) {
 
   const d = new Date(date);
@@ -2307,46 +2313,116 @@ function initManager(){
 
 
 async function renderBoard(){
-const targetDate=appState.filters.from||getTodayKey();
-const toDate=appState.filters.to||targetDate;
-const todayRecs=DB.records.filter(r=>r.dateKey>=targetDate&&r.dateKey<=toDate);
-const deviceLocks = await DB.getAllDeviceLocks();
-let present=0,late=0,onLeave=0,absent=0;const emps=getFilteredEmployees();
-const rows=emps.map(emp=>{
-const lock = deviceLocks.find(l => l.emp_id === emp.id);
-const latestDate = getTodayKey();
-const empRecsForDate = DB.records.filter(
-  r => r.empId === emp.id && r.dateKey === latestDate
-);
-const ds = SHIFT.getDisplayStatus(empRecsForDate);
-switch(ds.status){case'leave':onLeave++;break;case'present':present++;break;case'late':present++;late++;break;case'out':case'permission_out':present++;break;default:absent++;}
-const t=ds.time?new Date(ds.time).toLocaleTimeString('ar-EG',{hour12:false}):'--';let statusHtml;
-switch(ds.status){
-case'leave':statusHtml=`<div class="est s-leave">${sanitize(ds.detail)}</div><div class="ess s-leave">إجازة</div>`;break;
-case'permission_out':statusHtml=`<div class="est s-perm">${t}</div><div class="ess s-perm">انصرف بإذن</div>`;break;
-case'out':statusHtml=`<div class="est">${t}</div><div class="ess s-out">انصرف</div>`;break;
-case'late':statusHtml=`<div class="est">${t}</div><div class="ess s-late">⚠️ متأخر</div>`;break;
-case'present':statusHtml=`<div class="est">${t}</div><div class="ess s-present">✓ حاضر</div>`;break;
-default:statusHtml='<div class="est s-absent">--</div><div class="ess s-absent">غائب</div>';
-}
-const rc=ds.status==='absent'?'alert':ds.status==='leave'?'on-leave':'';
-const wa=emp.phone?`<button class="emp-act-btn emp-act-wa" onclick="event.stopPropagation();openWhatsApp('${emp.phone}')">واتساب</button>`:'';
-const cp=emp.phone?`<button class="emp-act-btn emp-act-copy" onclick="event.stopPropagation();copyPhone('${emp.phone}')">نسخ</button>`:'';
-const deviceWarn =
-  lock?.warning_count > 0
-    ? `<div class="emp-device-warning">
-         ⚠️ ${lock.warning_count} تغيير جهاز
-       </div>`
-    : '';
-return`<div class="emp-row ${rc}" onclick="openDetail('${emp.id}')"><div class="emp-av" style="background:${emp.color}">${sanitize(emp.ini)}</div><div class="emp-info"><h5>${sanitize(emp.name)}</h5><p>${sanitize(emp.dept||emp.title||'')}</p><div class="emp-actions">
-  ${wa}
-  ${cp}
-  ${deviceWarn}
-</div></div><div class="emp-status">${statusHtml}</div><span class="emp-chevron">‹</span></div>`;
-}).join('');
-document.getElementById('empList').innerHTML=rows||'<div style="color:var(--muted);text-align:center;padding:1rem">لا يوجد صيادلة</div>';
-document.getElementById('statPresent').textContent=present;document.getElementById('statAbsent').textContent=absent;document.getElementById('statLate').textContent=late;document.getElementById('statLeave').textContent=onLeave;
-if(DB.pending.length){document.getElementById('pendingCard').style.display='block';document.getElementById('pendingList').innerHTML=DB.pending.map(p=>`<div class="pend-row"><span>${sanitize(p.empName)}</span><span>${sanitize(p.sub)}</span></div>`).join('');}else{document.getElementById('pendingCard').style.display='none';}
+  const targetDate=appState.filters.from||getTodayKey();
+  const toDate=appState.filters.to||targetDate;
+  const todayKey=getTodayKey();
+  const deviceLocks = await DB.getAllDeviceLocks();
+  const emps=getFilteredEmployees();
+
+  // Build list of every date in the selected range
+  const rangeDates=[];
+  {
+    let d=parseDateLocal(targetDate);
+    const end=parseDateLocal(toDate);
+    while(d<=end){
+      rangeDates.push(getLocalDateKey(d));
+      d=new Date(d.getTime()+86400000);
+    }
+  }
+
+  // For the single-day view, show live (today) if range includes today, else the range's last day
+  const listDisplayDate = (toDate>=todayKey) ? todayKey : toDate;
+
+  // ---- Top stat cards: aggregate across the WHOLE selected range ----
+  let present=0,late=0,onLeave=0,absent=0;
+  emps.forEach(emp=>{
+    rangeDates.forEach(dk=>{
+      const dayRecs=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===dk);
+      const ds=SHIFT.getDisplayStatus(dayRecs);
+      switch(ds.status){
+        case'leave':onLeave++;break;
+        case'present':present++;break;
+        case'late':present++;late++;break;
+        case'out':case'permission_out':present++;break;
+        default:absent++;
+      }
+    });
+  });
+
+  // ---- Employee list rows ----
+  const rows=emps.map(emp=>{
+    const lock = deviceLocks.find(l => l.emp_id === emp.id);
+    let statusHtml, rc;
+
+    if(rangeDates.length<=1){
+      const dr=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===listDisplayDate);
+      const ds=SHIFT.getDisplayStatus(dr);
+      const t=ds.time?new Date(ds.time).toLocaleTimeString('ar-EG',{hour12:false}):'--';
+      switch(ds.status){
+        case'leave':statusHtml=`<div class="est s-leave">${sanitize(ds.detail)}</div><div class="ess s-leave">إجازة</div>`;break;
+        case'permission_out':statusHtml=`<div class="est s-perm">${t}</div><div class="ess s-perm">انصرف بإذن</div>`;break;
+        case'out':statusHtml=`<div class="est">${t}</div><div class="ess s-out">انصرف</div>`;break;
+        case'late':statusHtml=`<div class="est">${t}</div><div class="ess s-late">⚠️ متأخر</div>`;break;
+        case'present':statusHtml=`<div class="est">${t}</div><div class="ess s-present">✓حاضر</div>`;break;
+        default:statusHtml='<div class="est s-absent">--</div><div class="ess s-absent">غائب</div>';
+      }
+      rc=ds.status==='absent'?'alert':ds.status==='leave'?'on-leave':'';
+    }else{
+      let p=0,a=0,lv=0,lt=0;
+      rangeDates.forEach(dk=>{
+        const dr=DB.records.filter(r=>r.empId===emp.id&&r.dateKey===dk);
+        const ds=SHIFT.getDisplayStatus(dr);
+        switch(ds.status){
+          case'leave':lv++;break;
+          case'late':lt++;p++;break;
+          case'present':case'out':case'permission_out':p++;break;
+          default:a++;
+        }
+      });
+      statusHtml=`<div class="est" style="font-size:.68rem;line-height:1.5">
+        <span class="s-present">حاضر ${p}</span> ·
+        <span class="s-absent">غياب ${a}</span> ·
+        <span class="s-leave">إجازة ${lv}</span>
+        ${lt?` · <span class="s-late">تأخير ${lt}</span>`:''}
+      </div>`;
+      rc = a>0 ? 'alert' : (lv>0 ? 'on-leave' : '');
+    }
+
+    const wa=emp.phone?`<button class="emp-act-btn emp-act-wa" onclick="event.stopPropagation();openWhatsApp('${emp.phone}')">واتساب</button>`:'';
+    const cp=emp.phone?`<button class="emp-act-btn emp-act-copy" onclick="event.stopPropagation();copyPhone('${emp.phone}')">نسخ</button>`:'';
+    const deviceWarn = lock?.warning_count > 0 ? `<div class="emp-device-warning">⚠️ ${lock.warning_count} تغيير جهاز</div>` : '';
+
+    return `<div class="emp-row ${rc}" onclick="openDetail('${emp.id}')"><div class="emp-av" style="background:${emp.color}">${sanitize(emp.ini)}</div><div class="emp-info"><h5>${sanitize(emp.name)}</h5><p>${sanitize(emp.dept||emp.title||'')}</p><div class="emp-actions">${wa}${cp}${deviceWarn}</div></div><div class="emp-status">${statusHtml}</div><span class="emp-chevron">‹</span></div>`;
+  }).join('');
+
+  document.getElementById('empList').innerHTML=rows||'<div style="color:var(--muted);text-align:center;padding:1rem">لا يوجد صيادلة</div>';
+  document.getElementById('statPresent').textContent=present;
+  document.getElementById('statAbsent').textContent=absent;
+  document.getElementById('statLate').textContent=late;
+  document.getElementById('statLeave').textContent=onLeave;
+
+  // ---- Labels ----
+  const rangeLabelEl=document.getElementById('statsRangeLabel');
+  if(rangeLabelEl){
+    rangeLabelEl.textContent = targetDate===toDate
+      ? (targetDate===todayKey ? 'إحصائيات اليوم' : `إحصائيات يوم ${targetDate}`)
+      : `إحصائيات الفترة: من ${targetDate} إلى ${toDate}`;
+  }
+  const listLabelEl=document.getElementById('empListStatusLabel');
+  if(listLabelEl){
+    listLabelEl.textContent = rangeDates.length<=1
+      ? (listDisplayDate===todayKey ? '👤 الصيادلة — الحالة الآن (مباشر)' : `👤 الصيادلة — الحالة بتاريخ ${listDisplayDate}`)
+      : `👤 الصيادلة — ملخص الفترة المحددة`;
+  }
+
+  // ---- Pending offline sync card (uses the selected range) ----
+  const todayRecs=DB.records.filter(r=>r.dateKey>=targetDate&&r.dateKey<=toDate);
+  if(DB.pending.length){
+    document.getElementById('pendingCard').style.display='block';
+    document.getElementById('pendingList').innerHTML=DB.pending.map(p=>`<div class="pend-row"><span>${sanitize(p.empName)}</span><span>${sanitize(p.sub)}</span></div>`).join('');
+  }else{
+document.getElementById('pendingCard').style.display='none';
+  }
 }
 
 function filterByTitle(title,el){appState.filters.title=title;document.querySelectorAll('#titleFilterTags .ftag').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderBoard();}
