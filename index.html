@@ -1211,9 +1211,6 @@ async pullRecords(){
       from += pageSize;
     }
 
-    console.log('=== pullRecords ===');
-    console.log('window.currentUser:', window.currentUser);
-    console.log('ATTENDANCE ROWS FETCHED:', allRows.length);
 
     // Preserve existing records and add only records not already cached
     const existingIds = new Set(
@@ -2037,101 +2034,7 @@ function toast(msg,type='success'){const el=document.getElementById('toast');el.
 function sanitize(str){return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function formatDuration(ms){const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return`${h}س ${m}د`;}
 // ===== EMPLOYEE FUNCTIONS =====
-function renderAttendanceDiagnostic(){
 
-  const emp = appState.currentUser;
-  if(!emp) return;
-
-  const today = getTodayKey();
-
-  const localRecords = DB.records.filter(r =>
-    String(r.empId) === String(emp.id) &&
-    String(r.dateKey) === String(today)
-  );
-
-  const serverRecords = window.__attDiag?.rows || [];
-
-  function formatRecords(records, server = false){
-
-    if(!records.length) return 'No matching records found.';
-
-    return records.map((r, i) => {
-
-      const kind = r.kind || 'unknown';
-      const shift = server ? (r.shift_no ?? 1) : (r.shiftNo ?? 1);
-      const date = server ? r.date_key : r.dateKey;
-      const day = server ? (r.day_type || 'normal') : (r.dayType || 'normal');
-      const sub = r.sub || '--';
-      const time = r.time
-        ? new Date(Number(r.time)).toLocaleTimeString('en-GB')
-        : '--';
-
-      return `${i + 1}. ${kind} | shift=${shift} | day=${day}
-date=${date} | sub=${sub} | time=${time}`;
-    }).join('\n\n');
-  }
-
-  let panel = document.getElementById('attendanceDiagPanel');
-
-  if(!panel){
-
-    panel = document.createElement('div');
-    panel.id = 'attendanceDiagPanel';
-
-    panel.style.cssText = `
-      background:#fff3cd;
-      color:#222;
-      border:2px solid #d39e00;
-      border-radius:10px;
-      padding:12px;
-      margin:12px 0;
-      font-size:12px;
-      direction:ltr;
-      text-align:left;
-      white-space:pre-wrap;
-      overflow-wrap:anywhere;
-    `;
-
-    const body = document.querySelector('#pgEmp .emp-body');
-
-    if(body) body.prepend(panel);
-  }
-
-  const shiftState = SHIFT.getShiftState(localRecords, 1);
-  const dayType = SHIFT.getDayType(localRecords);
-
-  const serverStatus = window.__attDiag?.status || 'NOT RECORDED';
-
-  const output = `
-ATTENDLY TEMPORARY DIAGNOSTIC
-
-Employee: ${emp.name}
-Employee ID: ${emp.id}
-Today key: ${today}
-
-SUPABASE DOWNLOAD
-Status: ${serverStatus}
-Error: ${window.__attDiag?.error || 'None'}
-Total rows downloaded: ${window.__attDiag?.totalRows ?? 'Unknown'}
-
-SERVER RECORDS FOR THIS EMPLOYEE
-${formatRecords(
-  serverRecords.filter(r => String(r.date_key) === String(today)),
-  true
-)}
-
-LOCAL DB.RECORDS FOR THIS EMPLOYEE
-${formatRecords(localRecords)}
-
-SHIFT EVALUATION
-Day type: ${dayType}
-Shift 1 state: ${shiftState}
-
-Diagnostic time: ${new Date().toLocaleTimeString()}
-`;
-
-  panel.textContent = output;
-}
 function initEmployee(){
 const emp=appState.currentUser;
 document.getElementById('empName').textContent=emp.name;
@@ -2158,7 +2061,6 @@ if(weak){r.textContent=`دقة ${g.acc}م — اخرج للهواء الطلق`;
 else if(inside){r.textContent=`✅ داخل النطاق — ${Math.round(dist)}م`;r.className='gps-range inside';}
 else{r.textContent=`❌ خارج النطاق بـ ${Math.round(dist-GEO_RADIUS)}م`;r.className='gps-range outside';}
 updateActionButtons();
-renderAttendanceDiagnostic();
 }
 
 function calcDist(lat1,lng1,lat2,lng2){const R=6371000,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
